@@ -12,48 +12,51 @@
 <body>
     <div id="app">
         <!-- Loading durante verificação de auth -->
-        <div id="auth-loading" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; justify-content: center; align-items: center; z-index: 9999;">
-            <div style="text-align: center;">
-                <div>Verificando autenticação...</div>
-                <div style="margin-top: 10px; font-size: 12px;">Aguarde um momento</div>
+        <div id="auth-loading" class="auth-loading-overlay">
+            <div class="auth-loading-content">
+                <div class="auth-spinner"></div>
+                <p>Verificando autenticação...</p>
+                <small>Aguarde um momento</small>
             </div>
         </div>
 
-        <header>
-            <h1>PopCoin IDLE</h1>
-            <div id="auth-section">
-                <div id="user-info" style="display: none;">
-                    <img id="user-pic" src="" alt="Foto do usuário" style="width: 30px; height: 30px; border-radius: 50%; margin-right: 10px;">
-                    <span id="user-name" style="margin-right: 10px;"></span>
-                    <button onclick="logout()">Sair</button>
-                </div>
-                <div id="login-section">
-                    <button onclick="loginWithGoogle()">Login com Google</button>
+        <header class="main-header">
+            <div class="header-content">
+                <h1>🎮 PopCoin IDLE</h1>
+                <div id="auth-section">
+                    <div id="user-info" style="display: none;">
+                        <img id="user-pic" src="" alt="Foto do usuário" class="user-avatar">
+                        <span id="user-name" class="user-name"></span>
+                        <button onclick="logout()" class="btn-logout">🚪 Sair</button>
+                    </div>
+                    <div id="login-section">
+                        <button onclick="loginWithGoogle()" class="btn-login">🔑 Login com Google</button>
+                    </div>
                 </div>
             </div>
         </header>
 
-        <main>
+        <main class="main-content">
             {% block content %}{% endblock %}
         </main>
 
-        <footer>
+        <footer class="main-footer">
             <p>PopCoin IDLE &copy; 2024</p>
         </footer>
     </div>
 
     <script>
-        // Configuração do Firebase
+        // Configuração HARDCODED do Firebase como fallback
         const firebaseConfig = {
-            apiKey: "{{ firebase_config.apiKey }}",
-            authDomain: "{{ firebase_config.authDomain }}",
-            projectId: "{{ firebase_config.projectId }}",
-            storageBucket: "{{ firebase_config.storageBucket }}",
-            messagingSenderId: "{{ firebase_config.messagingSenderId }}",
-            appId: "{{ firebase_config.appId }}"
+            apiKey: "AIzaSyC_O0ur0PaP8iB_t2i6_m0WLU9C5FM4PZ4",
+            authDomain: "popcoin-idle-829ae.firebaseapp.com",
+            projectId: "popcoin-idle-829ae",
+            storageBucket: "popcoin-idle-829ae.firebasestorage.app",
+            messagingSenderId: "337350823197",
+            appId: "1:337350823197:web:4928ae4827e21c585da5f4"
         };
         
-        console.log('Inicializando Firebase...');
+        console.log('🚀 Inicializando Firebase com configuração hardcoded...');
         
         // Inicializar Firebase
         try {
@@ -66,5 +69,93 @@
     
     <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
     {% block scripts %}{% endblock %}
+
+    <style>
+        .auth-loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .auth-loading-content {
+            text-align: center;
+        }
+
+        .auth-spinner {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 4px solid white;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .main-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 0;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 1rem;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .user-name {
+            margin-right: 1rem;
+            font-weight: bold;
+        }
+
+        .btn-login, .btn-logout {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .btn-login:hover, .btn-logout:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .main-content {
+            min-height: calc(100vh - 120px);
+            padding: 2rem 1rem;
+        }
+
+        .main-footer {
+            text-align: center;
+            padding: 1rem;
+            background: #f8f9fa;
+            color: #666;
+        }
+    </style>
 </body>
 </html>
