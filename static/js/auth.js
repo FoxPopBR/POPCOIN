@@ -1,4 +1,5 @@
-// static/js/auth.js - VERSÃO CORRIGIDA
+// static/js/auth.js - VERSÃO COMPLETA E CORRETA
+
 class AuthManager {
     constructor() {
         this.user = null;
@@ -7,10 +8,7 @@ class AuthManager {
         this.redirecting = false;
         this.setupAuthListeners();
         this.checkAuthStatus();
-        // CORREÇÃO: Remover setupButtonListeners duplicado
     }
-
-    // CORREÇÃO: Remover setupButtonListeners duplicado - já está no DOMContentLoaded global
 
     setupAuthListeners() {
         console.log('🔥 Configurando observador do Firebase Auth...');
@@ -77,74 +75,115 @@ class AuthManager {
         }
     }
 
-    setupAuthListeners() {
-        console.log('🔥 Configurando observador do Firebase Auth...');
-        
-        firebase.auth().onAuthStateChanged(async (user) => {
-            console.log('🔄 Firebase auth state changed:', user ? `Logado: ${user.email}` : 'Deslogado');
-            
-            if (user) {
-                await this.handleUserLogin(user);
-            } else {
-                this.handleUserLogout();
-            }
-        });
-    }
-
-    async loginWithGoogle() {
+    // === NOVOS MÉTODOS DE AUTENTICAÇÃO POR EMAIL ===
+    async registerWithEmail(name, email, password) {
         try {
-            console.log('🔐 INICIANDO LOGIN COM GOOGLE...');
+            console.log('📝 Iniciando registro com email...');
             
-            const provider = new firebase.auth.GoogleAuthProvider();
-            provider.addScope('profile');
-            provider.addScope('email');
+            // Criar usuário com email e senha
+            const userCredential = await firebase.auth().createUserWithEmailAndPassword(email, password);
+            const user = userCredential.user;
             
-            // Forçar seleção de conta
-            provider.setCustomParameters({
-                prompt: 'select_account'
+            // Atualizar o perfil do usuário com o nome
+            await user.updateProfile({
+                displayName: name
             });
             
-            console.log('🪟 Abrindo popup do Google...');
-            const result = await firebase.auth().signInWithPopup(provider);
-            console.log('✅ Login com Google bem-sucedido!', result.user.email);
-            return result.user;
+            console.log('✅ Registro bem-sucedido!', user.email);
+            
+            // Disparar o fluxo de login (já que o usuário foi autenticado)
+            await this.handleUserLogin(user);
+            
+            return user;
             
         } catch (error) {
-            console.error('❌ ERRO NO LOGIN COM GOOGLE:', error);
+            console.error('❌ ERRO NO REGISTRO:', error);
             
-            let errorMessage = 'Erro no login: ';
-            let showAlert = true;
-            
+            let errorMessage = 'Erro no registro: ';
             switch (error.code) {
-                case 'auth/popup-blocked':
-                    errorMessage += 'Popup bloqueado. Permita popups para este site.';
+                case 'auth/email-already-in-use':
+                    errorMessage += 'Este email já está em uso.';
                     break;
-                case 'auth/popup-closed-by-user':
-                    errorMessage += 'Popup fechado pelo usuário.';
-                    showAlert = false; // Não mostrar alerta para fechamento normal
+                case 'auth/invalid-email':
+                    errorMessage += 'Email inválido.';
                     break;
-                case 'auth/unauthorized-domain':
-                    errorMessage += 'Domínio não autorizado. Verifique as configurações do Firebase.';
-                    break;
-                case 'auth/network-request-failed':
-                    errorMessage += 'Erro de rede. Verifique sua conexão.';
-                    break;
-                case 'auth/cancelled-popup-request':
-                    errorMessage += 'Popup cancelado.';
-                    showAlert = false;
+                case 'auth/weak-password':
+                    errorMessage += 'Senha muito fraca.';
                     break;
                 default:
                     errorMessage += error.message;
             }
             
-            console.error('❌ Detalhes do erro:', error);
-            
-            if (showAlert) {
-                this.showMessage(errorMessage, 'error');
-            }
+            this.showMessage(errorMessage, 'error');
             throw error;
         }
     }
+
+    async loginWithEmail(email, password) {
+        try {
+            console.log('🔐 Iniciando login com email...');
+            
+            const userCredential = await firebase.auth().signInWithEmailAndPassword(email, password);
+            const user = userCredential.user;
+            
+            console.log('✅ Login com email bem-sucedido!', user.email);
+            
+            // Disparar o fluxo de login
+            await this.handleUserLogin(user);
+            
+            return user;
+            
+        } catch (error) {
+            console.error('❌ ERRO NO LOGIN COM EMAIL:', error);
+            
+            let errorMessage = 'Erro no login: ';
+            switch (error.code) {
+                case 'auth/user-not-found':
+                    errorMessage += 'Usuário não encontrado.';
+                    break;
+                case 'auth/wrong-password':
+                    errorMessage += 'Senha incorreta.';
+                    break;
+                case 'auth/invalid-email':
+                    errorMessage += 'Email inválido.';
+                    break;
+                default:
+                    errorMessage += error.message;
+            }
+            
+            this.showMessage(errorMessage, 'error');
+            throw error;
+        }
+    }
+
+    async resetPassword(email) {
+        try {
+            console.log('🔑 Iniciando redefinição de senha...');
+            
+            await firebase.auth().sendPasswordResetEmail(email);
+            
+            this.showMessage('Email de redefinição de senha enviado! Verifique sua caixa de entrada.', 'success');
+            
+        } catch (error) {
+            console.error('❌ ERRO AO REDEFINIR SENHA:', error);
+            
+            let errorMessage = 'Erro ao redefinir senha: ';
+            switch (error.code) {
+                case 'auth/user-not-found':
+                    errorMessage += 'Usuário não encontrado.';
+                    break;
+                case 'auth/invalid-email':
+                    errorMessage += 'Email inválido.';
+                    break;
+                default:
+                    errorMessage += error.message;
+            }
+            
+            this.showMessage(errorMessage, 'error');
+            throw error;
+        }
+    }
+    // === FIM DOS NOVOS MÉTODOS ===
 
     async handleUserLogin(user) {
         console.log('👤 Processando login do usuário:', user.email);
@@ -358,7 +397,7 @@ class AuthManager {
     }
 }
 
-// Inicialização global com mais logs
+// Inicialização global
 let authManager;
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -425,7 +464,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 500);
 });
 
-// Função global para compatibilidade
+// Funções globais para compatibilidade
 window.loginWithGoogle = function() {
     console.log('🌐 Função global loginWithGoogle chamada');
     if (window.authManager) {
@@ -442,7 +481,77 @@ window.loginWithGoogle = function() {
     }
 };
 
-window.logout = () => {
+window.loginWithEmail = function() {
+    console.log('🌐 Função global loginWithEmail chamada');
+    const email = document.getElementById('login-email')?.value;
+    const password = document.getElementById('login-password')?.value;
+    
+    if (!email || !password) {
+        alert('Por favor, preencha email e senha');
+        return;
+    }
+    
+    if (window.authManager) {
+        window.authManager.loginWithEmail(email, password);
+    } else {
+        console.error('❌ AuthManager não inicializado');
+        setTimeout(() => {
+            if (window.authManager) {
+                window.authManager.loginWithEmail(email, password);
+            } else {
+                alert('Sistema de autenticação não carregado. Recarregue a página.');
+            }
+        }, 1000);
+    }
+};
+
+window.registerWithEmail = function() {
+    console.log('🌐 Função global registerWithEmail chamada');
+    const name = document.getElementById('register-name')?.value;
+    const email = document.getElementById('register-email')?.value;
+    const password = document.getElementById('register-password')?.value;
+    const confirm = document.getElementById('register-confirm')?.value;
+    
+    if (!name || !email || !password || !confirm) {
+        alert('Por favor, preencha todos os campos');
+        return;
+    }
+    
+    if (password !== confirm) {
+        alert('As senhas não coincidem');
+        return;
+    }
+    
+    if (password.length < 6) {
+        alert('A senha deve ter pelo menos 6 caracteres');
+        return;
+    }
+    
+    if (window.authManager) {
+        window.authManager.registerWithEmail(name, email, password);
+    } else {
+        console.error('❌ AuthManager não inicializado');
+        setTimeout(() => {
+            if (window.authManager) {
+                window.authManager.registerWithEmail(name, email, password);
+            } else {
+                alert('Sistema de autenticação não carregado. Recarregue a página.');
+            }
+        }, 1000);
+    }
+};
+
+window.resetPassword = function() {
+    console.log('🌐 Função global resetPassword chamada');
+    const email = prompt('Digite seu e-mail para redefinir a senha:');
+    if (email && window.authManager) {
+        window.authManager.resetPassword(email);
+    } else if (!email) {
+        alert('Por favor, insira um email.');
+    }
+};
+
+window.logout = function() {
     console.log('🌐 Função global logout chamada');
     if (window.authManager) {
         if (confirm('Tem certeza que deseja sair?')) {

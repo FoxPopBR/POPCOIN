@@ -1,3 +1,4 @@
+<!-- templates/index.html - APENAS A PARTE DOS FORMULÁRIOS CORRIGIDA -->
 {% extends "base.html" %}
 
 {% block title %}PopCoin IDLE - Início{% endblock %}
@@ -54,19 +55,21 @@
             
             <!-- Formulário de Login -->
             <div id="login-form" class="auth-form">
-                <div class="form-group">
-                    <label for="login-email">E-mail:</label>
-                    <input type="email" id="login-email" placeholder="seu@email.com">
-                </div>
-                
-                <div class="form-group">
-                    <label for="login-password">Senha:</label>
-                    <input type="password" id="login-password" placeholder="Sua senha">
-                </div>
-                
-                <button class="btn btn-primary" onclick="loginWithEmail()">
-                    🔐 Entrar com E-mail
-                </button>
+                <form onsubmit="event.preventDefault(); loginWithEmail();">
+                    <div class="form-group">
+                        <label for="login-email">E-mail:</label>
+                        <input type="email" id="login-email" placeholder="seu@email.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="login-password">Senha:</label>
+                        <input type="password" id="login-password" placeholder="Sua senha" required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        🔐 Entrar com E-mail
+                    </button>
+                </form>
                 
                 <div class="text-center mt-1">
                     <button class="btn btn-secondary" onclick="resetPassword()">
@@ -76,7 +79,7 @@
                 
                 <div class="separator">ou</div>
                 
-                <button id="loginButton" class="btn btn-google">
+                <button class="btn btn-google" onclick="loginWithGoogle()">
                     <span class="btn-icon">🔗</span>
                     Entrar com Google
                 </button>
@@ -84,29 +87,31 @@
             
             <!-- Formulário de Registro -->
             <div id="register-form" class="auth-form hidden">
-                <div class="form-group">
-                    <label for="register-name">Nome completo:</label>
-                    <input type="text" id="register-name" placeholder="Seu nome completo">
-                </div>
-                
-                <div class="form-group">
-                    <label for="register-email">E-mail:</label>
-                    <input type="email" id="register-email" placeholder="seu@email.com">
-                </div>
-                
-                <div class="form-group">
-                    <label for="register-password">Senha:</label>
-                    <input type="password" id="register-password" placeholder="Mínimo 6 caracteres">
-                </div>
-                
-                <div class="form-group">
-                    <label for="register-confirm">Confirmar senha:</label>
-                    <input type="password" id="register-confirm" placeholder="Digite novamente">
-                </div>
-                
-                <button class="btn btn-primary" onclick="registerWithEmail()">
-                    📝 Criar Conta
-                </button>
+                <form onsubmit="event.preventDefault(); registerWithEmail();">
+                    <div class="form-group">
+                        <label for="register-name">Nome completo:</label>
+                        <input type="text" id="register-name" placeholder="Seu nome completo" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="register-email">E-mail:</label>
+                        <input type="email" id="register-email" placeholder="seu@email.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="register-password">Senha:</label>
+                        <input type="password" id="register-password" placeholder="Mínimo 6 caracteres" minlength="6" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="register-confirm">Confirmar senha:</label>
+                        <input type="password" id="register-confirm" placeholder="Digite novamente" required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        📝 Criar Conta
+                    </button>
+                </form>
                 
                 <div class="separator">ou</div>
                 
@@ -192,54 +197,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, 100);
 });
-
-// Funções de autenticação por email (serão implementadas no auth.js)
-function loginWithEmail() {
-    const email = document.getElementById('login-email').value;
-    const password = document.getElementById('login-password').value;
-    
-    if (!email || !password) {
-        alert('Por favor, preencha todos os campos');
-        return;
-    }
-    
-    if (window.authManager) {
-        window.authManager.loginWithEmail(email, password);
-    }
-}
-
-function registerWithEmail() {
-    const name = document.getElementById('register-name').value;
-    const email = document.getElementById('register-email').value;
-    const password = document.getElementById('register-password').value;
-    const confirm = document.getElementById('register-confirm').value;
-    
-    if (!name || !email || !password || !confirm) {
-        alert('Por favor, preencha todos os campos');
-        return;
-    }
-    
-    if (password !== confirm) {
-        alert('As senhas não coincidem');
-        return;
-    }
-    
-    if (password.length < 6) {
-        alert('A senha deve ter pelo menos 6 caracteres');
-        return;
-    }
-    
-    if (window.authManager) {
-        window.authManager.registerWithEmail(name, email, password);
-    }
-}
-
-function resetPassword() {
-    const email = prompt('Digite seu e-mail para redefinir a senha:');
-    if (email && window.authManager) {
-        window.authManager.resetPassword(email);
-    }
-}
 </script>
 
 <style>
