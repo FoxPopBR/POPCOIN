@@ -11,28 +11,19 @@
 </head>
 <body>
     <div id="app">
-        <!-- Loading durante verificação de auth -->
-        <div id="auth-loading" class="auth-loading-overlay">
-            <div class="auth-loading-content">
-                <div class="auth-spinner"></div>
-                <p>Verificando autenticação...</p>
-                <small>Aguarde um momento</small>
-            </div>
-        </div>
-
         <header class="main-header">
             <div class="header-content">
                 <h1>🎮 PopCoin IDLE</h1>
                 <div id="auth-section">
-                    <!-- SEÇÃO DO USUÁRIO LOGADO (inicialmente escondida) -->
-                    <div id="user-info" class="user-info" style="display: none;">
-                        <img id="user-pic" src="" alt="Foto do usuário" class="user-avatar">
+                    <!-- Usuário logado -->
+                    <div id="user-info" style="display: none;">
+                        <img id="user-pic" src="" alt="Foto" class="user-avatar">
                         <span id="user-name" class="user-name"></span>
                         <button id="logoutButton" class="btn-logout">🚪 Sair</button>
                     </div>
                     
-                    <!-- SEÇÃO DE LOGIN (inicialmente visível) -->
-                    <div id="login-section" class="login-section">
+                    <!-- Login -->
+                    <div id="login-section">
                         <button id="loginButton" class="btn-login">
                             🔑 Entrar com Google
                         </button>
@@ -51,7 +42,7 @@
     </div>
 
     <script>
-        // Configuração HARDCODED do Firebase
+        // Configuração do Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyC_O0ur0PaP8iB_t2i6_m0WLU9C5FM4PZ4",
             authDomain: "popcoin-idle-829ae.firebaseapp.com",
@@ -61,59 +52,18 @@
             appId: "1:337350823197:web:4928ae4827e21c585da5f4"
         };
         
-        console.log('🚀 Inicializando Firebase com configuração hardcoded...');
-        
-        try {
-            firebase.initializeApp(firebaseConfig);
-            console.log('✅ Firebase inicializado com sucesso!');
-        } catch (error) {
-            console.error('❌ Erro ao inicializar Firebase:', error);
-        }
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
     </script>
     
-    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/auth-simple.js') }}"></script>
     {% block scripts %}{% endblock %}
 
     <style>
-        /* ESTILOS CRÍTICOS PARA A INTERFACE */
-        .auth-loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-        }
-
-        .auth-loading-content {
-            text-align: center;
-        }
-
-        .auth-spinner {
-            border: 4px solid rgba(255,255,255,0.3);
-            border-radius: 50%;
-            border-top: 4px solid white;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1rem;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
         .main-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 1rem 0;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
 
         .header-content {
@@ -125,34 +75,6 @@
             padding: 0 1rem;
         }
 
-        .header-content h1 {
-            margin: 0;
-            font-size: 1.8rem;
-        }
-
-        #auth-section {
-            display: flex;
-            align-items: center;
-        }
-
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            border: 2px solid white;
-        }
-
-        .user-name {
-            font-weight: bold;
-            margin-right: 0.5rem;
-        }
-
         .btn-login, .btn-logout {
             background: rgba(255,255,255,0.2);
             border: 2px solid rgba(255,255,255,0.3);
@@ -161,23 +83,18 @@
             border-radius: 25px;
             cursor: pointer;
             font-weight: bold;
-            font-size: 1rem;
             transition: all 0.3s ease;
-            min-width: 180px;
         }
 
         .btn-login:hover, .btn-logout:hover {
             background: rgba(255,255,255,0.3);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
 
-        .btn-login:active, .btn-logout:active {
-            transform: translateY(0);
-        }
-
-        .login-section {
-            display: block;
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
         }
 
         .main-content {
@@ -189,24 +106,9 @@
 
         .main-footer {
             text-align: center;
-            padding: 1.5rem;
+            padding: 1rem;
             background: #f8f9fa;
             color: #666;
-            border-top: 1px solid #e9ecef;
-        }
-
-        /* Estilos para garantir visibilidade */
-        #loginButton {
-            opacity: 1 !important;
-            visibility: visible !important;
-            display: block !important;
-            position: relative !important;
-            z-index: 1000 !important;
-        }
-
-        /* Debug visual - remover depois */
-        .debug-border {
-            border: 2px solid red !important;
         }
     </style>
 </body>

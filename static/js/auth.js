@@ -1,4 +1,4 @@
-// static/js/auth.js - ADICIONAR ESTA VERSÃO
+// static/js/auth.js - VERSÃO CORRIGIDA COMPLETA
 
 class AuthManager {
     constructor() {
@@ -8,7 +8,7 @@ class AuthManager {
         this.redirecting = false;
         this.setupAuthListeners();
         this.checkAuthStatus();
-        this.setupButtonListeners(); // ← NOVO: Configurar botões imediatamente
+        this.setupButtonListeners();
     }
 
     setupButtonListeners() {
@@ -50,7 +50,7 @@ class AuthManager {
 
             // Botão de logout
             const logoutButton = document.getElementById('logoutButton');
-        if (logoutButton) {
+            if (logoutButton) {
                 logoutButton.addEventListener('click', (e) => {
                     e.preventDefault();
                     if (confirm('Tem certeza que deseja sair?')) {
@@ -60,6 +60,7 @@ class AuthManager {
             }
         }, 500);
     }
+
     setupAuthListeners() {
         console.log('🔥 Configurando observador do Firebase Auth...');
         
@@ -256,6 +257,11 @@ class AuthManager {
         } finally {
             this.authChecked = true;
             this.hideAuthLoading();
+
+            // CORREÇÃO ADICIONADA: Se não autenticado, garantir exibição do botão de login
+            if (!this.isAuthenticated) {
+                this.showLoginUI();
+            }
         }
     }
 
@@ -289,6 +295,15 @@ class AuthManager {
             console.log('👋 Escondendo loading...');
             loadingElement.style.display = 'none';
         }
+    }
+
+    // CORREÇÃO ADICIONADA: Função para mostrar a interface de login
+    showLoginUI() {
+        const loadingElement = document.getElementById('auth-loading');
+        const loginSection = document.getElementById('login-section');
+        if (loadingElement) loadingElement.style.display = 'none';
+        if (loginSection) loginSection.style.display = 'block';
+        console.log('✅ Interface de login exibida.');
     }
 
     showMessage(message, type = 'info') {
@@ -332,6 +347,12 @@ let authManager;
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 DOM carregado, inicializando sistema de autenticação...');
+    
+    // CORREÇÃO ADICIONADA: Esconder a seção de login inicialmente
+    const loginSection = document.getElementById('login-section');
+    if (loginSection) {
+        loginSection.style.display = 'none';
+    }
     
     // Mostrar loading
     const loadingElement = document.getElementById('auth-loading');
