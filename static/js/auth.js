@@ -1,4 +1,5 @@
-// Gerenciamento de autenticação - VERSÃO SIMPLIFICADA E FUNCIONAL
+// static/js/auth.js - ADICIONAR ESTA VERSÃO
+
 class AuthManager {
     constructor() {
         this.user = null;
@@ -7,12 +8,49 @@ class AuthManager {
         this.redirecting = false;
         this.setupAuthListeners();
         this.checkAuthStatus();
+        this.setupButtonListeners(); // ← NOVO: Configurar botões imediatamente
+    }
+
+    setupButtonListeners() {
+        console.log('🔘 Configurando listeners dos botões...');
+        
+        // Botão de login
+        const loginButton = document.getElementById('loginButton');
+        if (loginButton) {
+            console.log('✅ Botão de login encontrado, adicionando listener...');
+            loginButton.addEventListener('click', () => {
+                console.log('🎯 Botão de login CLICADO!');
+                this.loginWithGoogle();
+            });
+        } else {
+            console.error('❌ Botão de login NÃO encontrado!');
+            // Tentar encontrar por classe ou outros seletores
+            const fallbackLoginBtn = document.querySelector('.btn-google, .btn-login, [onclick*="login"]');
+            if (fallbackLoginBtn) {
+                console.log('🔄 Encontrado botão alternativo:', fallbackLoginBtn);
+                fallbackLoginBtn.addEventListener('click', () => {
+                    console.log('🎯 Botão alternativo CLICADO!');
+                    this.loginWithGoogle();
+                });
+            }
+        }
+
+        // Botão de logout
+        const logoutButton = document.getElementById('logoutButton');
+        if (logoutButton) {
+            logoutButton.addEventListener('click', () => {
+                if (confirm('Tem certeza que deseja sair?')) {
+                    this.logout();
+                }
+            });
+        }
     }
 
     setupAuthListeners() {
-        // Configurar observador de estado de autenticação do Firebase
+        console.log('🔥 Configurando observador do Firebase Auth...');
+        
         firebase.auth().onAuthStateChanged(async (user) => {
-            console.log('🔥 Firebase auth state changed:', user ? user.email : 'null');
+            console.log('🔄 Firebase auth state changed:', user ? `Logado: ${user.email}` : 'Deslogado');
             
             if (user) {
                 await this.handleUserLogin(user);
@@ -22,14 +60,70 @@ class AuthManager {
         });
     }
 
+    async loginWithGoogle() {
+        try {
+            console.log('🔐 INICIANDO LOGIN COM GOOGLE...');
+            
+            const provider = new firebase.auth.GoogleAuthProvider();
+            provider.addScope('profile');
+            provider.addScope('email');
+            
+            // Forçar seleção de conta
+            provider.setCustomParameters({
+                prompt: 'select_account'
+            });
+            
+            console.log('🪟 Abrindo popup do Google...');
+            const result = await firebase.auth().signInWithPopup(provider);
+            console.log('✅ Login com Google bem-sucedido!', result.user.email);
+            return result.user;
+            
+        } catch (error) {
+            console.error('❌ ERRO NO LOGIN COM GOOGLE:', error);
+            
+            let errorMessage = 'Erro no login: ';
+            let showAlert = true;
+            
+            switch (error.code) {
+                case 'auth/popup-blocked':
+                    errorMessage += 'Popup bloqueado. Permita popups para este site.';
+                    break;
+                case 'auth/popup-closed-by-user':
+                    errorMessage += 'Popup fechado pelo usuário.';
+                    showAlert = false; // Não mostrar alerta para fechamento normal
+                    break;
+                case 'auth/unauthorized-domain':
+                    errorMessage += 'Domínio não autorizado. Verifique as configurações do Firebase.';
+                    break;
+                case 'auth/network-request-failed':
+                    errorMessage += 'Erro de rede. Verifique sua conexão.';
+                    break;
+                case 'auth/cancelled-popup-request':
+                    errorMessage += 'Popup cancelado.';
+                    showAlert = false;
+                    break;
+                default:
+                    errorMessage += error.message;
+            }
+            
+            console.error('❌ Detalhes do erro:', error);
+            
+            if (showAlert) {
+                this.showMessage(errorMessage, 'error');
+            }
+            throw error;
+        }
+    }
+
     async handleUserLogin(user) {
         console.log('👤 Processando login do usuário:', user.email);
         this.user = user;
         
         try {
             // Obter token do Firebase
+            console.log('🔐 Obtendo token Firebase...');
             const token = await user.getIdToken();
-            console.log('🔐 Token obtido, enviando para servidor...');
+            console.log('✅ Token obtido, enviando para servidor...');
             
             // Enviar token para o servidor
             const response = await fetch('/api/auth/login', {
@@ -40,8 +134,9 @@ class AuthManager {
                 body: JSON.stringify({ token: token })
             });
 
+            console.log('📡 Aguardando resposta do servidor...');
             const result = await response.json();
-            console.log('📡 Resposta do servidor:', result);
+            console.log('📨 Resposta do servidor:', result);
             
             if (result.success) {
                 this.isAuthenticated = true;
@@ -55,10 +150,10 @@ class AuthManager {
                 
                 // Redirecionar para o jogo após login bem-sucedido
                 if (window.location.pathname === '/') {
-                    console.log('➡️ Redirecionando para /game');
+                    console.log('➡️ Redirecionando para /game...');
                     setTimeout(() => {
                         window.location.href = '/game';
-                    }, 1000);
+                    }, 1500);
                 }
             } else {
                 console.error('❌ Erro no servidor:', result.error);
@@ -84,52 +179,10 @@ class AuthManager {
         
         // Redirecionar para a página inicial se estiver no jogo
         if (window.location.pathname === '/game') {
-            console.log('⬅️ Redirecionando para /');
+            console.log('⬅️ Redirecionando para /...');
             setTimeout(() => {
                 window.location.href = '/';
             }, 1000);
-        }
-    }
-
-    async loginWithGoogle() {
-        try {
-            console.log('🔐 Iniciando login com Google...');
-            
-            const provider = new firebase.auth.GoogleAuthProvider();
-            provider.addScope('profile');
-            provider.addScope('email');
-            
-            // Forçar seleção de conta
-            provider.setCustomParameters({
-                prompt: 'select_account'
-            });
-            
-            const result = await firebase.auth().signInWithPopup(provider);
-            console.log('✅ Login com Google bem-sucedido');
-            return result.user;
-        } catch (error) {
-            console.error('❌ Erro no login com Google:', error);
-            
-            let errorMessage = 'Erro no login: ';
-            switch (error.code) {
-                case 'auth/popup-blocked':
-                    errorMessage += 'Popup bloqueado. Permita popups para este site.';
-                    break;
-                case 'auth/popup-closed-by-user':
-                    errorMessage += 'Popup fechado pelo usuário.';
-                    break;
-                case 'auth/unauthorized-domain':
-                    errorMessage += 'Domínio não autorizado.';
-                    break;
-                case 'auth/network-request-failed':
-                    errorMessage += 'Erro de rede. Verifique sua conexão.';
-                    break;
-                default:
-                    errorMessage += error.message;
-            }
-            
-            this.showMessage(errorMessage, 'error');
-            throw error;
         }
     }
 
@@ -154,7 +207,7 @@ class AuthManager {
 
     async checkAuthStatus() {
         try {
-            console.log("🔍 Verificando status de autenticação...");
+            console.log("🔍 Verificando status de autenticação no servidor...");
             const response = await fetch('/api/auth/status');
             const data = await response.json();
             
@@ -193,6 +246,8 @@ class AuthManager {
     }
 
     updateUI(user) {
+        console.log('🎨 Atualizando UI para usuário:', user ? user.email : 'null');
+        
         const userInfo = document.getElementById('user-info');
         const loginSection = document.getElementById('login-section');
         const userPic = document.getElementById('user-pic');
@@ -217,84 +272,97 @@ class AuthManager {
     hideAuthLoading() {
         const loadingElement = document.getElementById('auth-loading');
         if (loadingElement) {
+            console.log('👋 Escondendo loading...');
             loadingElement.style.display = 'none';
         }
     }
 
     showMessage(message, type = 'info') {
-        console.log(`${type.toUpperCase()}: ${message}`);
-        // Sistema de mensagens simples - pode ser melhorado
+        console.log(`💬 ${type}: ${message}`);
+        
+        // Sistema de mensagens melhorado
         const messageDiv = document.createElement('div');
         messageDiv.style.cssText = `
             position: fixed;
             top: 20px;
             right: 20px;
             padding: 15px 20px;
-            background: ${type === 'error' ? '#ff4444' : '#44ff44'};
+            background: ${type === 'error' ? '#ff4444' : type === 'success' ? '#44ff44' : '#4488ff'};
             color: white;
             border-radius: 5px;
             z-index: 10000;
             font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            max-width: 400px;
+            word-wrap: break-word;
         `;
         messageDiv.textContent = message;
         document.body.appendChild(messageDiv);
         
         setTimeout(() => {
-            document.body.removeChild(messageDiv);
+            if (messageDiv.parentNode) {
+                messageDiv.style.opacity = '0';
+                messageDiv.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => {
+                    if (messageDiv.parentNode) {
+                        document.body.removeChild(messageDiv);
+                    }
+                }, 500);
+            }
         }, 5000);
     }
 }
 
-// Inicialização global
+// Inicialização global com mais logs
 let authManager;
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Inicializando sistema de autenticação...');
+    console.log('🚀 DOM carregado, inicializando sistema de autenticação...');
     
     // Mostrar loading
     const loadingElement = document.getElementById('auth-loading');
     if (loadingElement) {
         loadingElement.style.display = 'flex';
+        console.log('⏳ Loading de autenticação mostrado');
     }
     
-    // Aguardar o Firebase carregar
+    // Aguardar o Firebase carregar completamente
     setTimeout(() => {
+        console.log('🎯 Criando AuthManager...');
         authManager = new AuthManager();
         window.authManager = authManager;
         
-        // Configurar event listeners para botões
-        const loginButton = document.getElementById('loginButton');
-        const logoutButton = document.getElementById('logoutButton');
-
-        if (loginButton) {
-            loginButton.addEventListener('click', () => authManager.loginWithGoogle());
-        }
-
-        if (logoutButton) {
-            logoutButton.addEventListener('click', () => {
-                if (confirm('Tem certeza que deseja sair?')) {
-                    authManager.logout();
-                }
-            });
-        }
-    }, 500);
+        console.log('✅ Sistema de autenticação inicializado!');
+        console.log('💡 Dica: Clique no botão "Login com Google" para testar');
+        
+    }, 1000);
 });
 
 // Funções globais para compatibilidade com HTML onclick
 window.loginWithGoogle = () => {
+    console.log('🌐 Função global loginWithGoogle chamada');
     if (window.authManager) {
         window.authManager.loginWithGoogle();
     } else {
-        console.error('AuthManager não inicializado');
+        console.error('❌ AuthManager não inicializado ainda');
+        // Tentar inicializar se não estiver pronto
+        setTimeout(() => {
+            if (window.authManager) {
+                window.authManager.loginWithGoogle();
+            } else {
+                alert('Sistema de autenticação não carregado. Recarregue a página.');
+            }
+        }, 1000);
     }
 };
 
 window.logout = () => {
+    console.log('🌐 Função global logout chamada');
     if (window.authManager) {
         if (confirm('Tem certeza que deseja sair?')) {
             window.authManager.logout();
         }
     } else {
-        console.error('AuthManager não inicializado');
+        console.error('❌ AuthManager não inicializado');
     }
 };
