@@ -151,7 +151,7 @@ def game_state():
     if not user_info:
         return jsonify({'error': 'Não autenticado'}), 401
 
-    user_id = user_info['uid']  # Aqui está correto
+    user_id = user_info['uid']
 
     if not game_manager:
         # Retornar estado padrão se game_manager não estiver disponível
@@ -179,8 +179,8 @@ def game_state():
             return jsonify(game_state)
         else:
             data = request.get_json()
-            game_manager.save_game_state(user_id, data)
-            return jsonify({'success': True})
+            success = game_manager.save_game_state(user_id, data)
+            return jsonify({'success': success})
     except Exception as e:
         print(f"❌ Erro no game_state: {e}")
         return jsonify({'error': str(e)}), 500

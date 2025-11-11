@@ -1,6 +1,7 @@
+# game/game_logic.py - VERSÃO OTIMIZADA
 import json
 import time
-from database.db_models import get_db_connection
+from database.db_models import get_db_connection, return_db_connection
 
 class GameManager:
     def __init__(self):
@@ -21,7 +22,7 @@ class GameManager:
         }
     
     def get_user_game_state(self, user_id):
-        """Recupera o estado do jogo do usuário do banco de dados"""
+        """Recupera o estado do jogo do usuário usando pool"""
         conn = get_db_connection()
         if not conn:
             print("❌ No database connection in get_user_game_state")
@@ -30,7 +31,6 @@ class GameManager:
         cur = conn.cursor()
         
         try:
-            # CORREÇÃO: Usar placeholder correto para PostgreSQL
             cur.execute(
                 'SELECT game_data FROM user_game_states WHERE user_id = %s',
                 (user_id,)
@@ -38,13 +38,11 @@ class GameManager:
             result = cur.fetchone()
             
             if result:
-                game_state = json.loads(result[0])  # PostgreSQL retorna como tuple
-                # Calcular moedas geradas offline
+                game_state = json.loads(result[0])
                 game_state = self.calculate_offline_earnings(game_state)
                 print(f"✅ Game state loaded for user {user_id}")
                 return game_state
             else:
-                # Primeiro acesso - criar estado inicial
                 print(f"🆕 Creating initial game state for user {user_id}")
                 return self.create_initial_game_state(user_id)
                 
@@ -53,26 +51,21 @@ class GameManager:
             return self.default_game_state.copy()
         finally:
             cur.close()
-            conn.close()
-    
-    def create_initial_game_state(self, user_id):
-        """Cria estado inicial do jogo para novo usuário"""
-        initial_state = self.default_game_state.copy()
-        self.save_game_state(user_id, initial_state)
-        return initial_state
+            return_db_connection(conn)
     
     def save_game_state(self, user_id, game_state):
-        """Salva o estado do jogo no banco de dados"""
+        """Salva o estado do jogo usando pool"""
         conn = get_db_connection()
         if not conn:
             print("❌ No database connection in save_game_state")
-            return
+            return False
             
         cur = conn.cursor()
         
         try:
+            game_state['last_update'] = time.time()  # Atualizar timestamp
             game_state_json = json.dumps(game_state)
-            # CORREÇÃO: Usar placeholder correto para PostgreSQL
+            
             cur.execute(
                 '''INSERT INTO user_game_states (user_id, game_data) 
                    VALUES (%s, %s)
@@ -82,12 +75,21 @@ class GameManager:
             )
             conn.commit()
             print(f"✅ Game state saved for user {user_id}")
+            return True
+            
         except Exception as e:
             print(f"❌ Erro ao salvar estado do jogo: {e}")
             conn.rollback()
+            return False
         finally:
             cur.close()
-            conn.close()
+            return_db_connection(conn)
+    
+    def create_initial_game_state(self, user_id):
+        """Cria estado inicial do jogo para novo usuário"""
+        initial_state = self.default_game_state.copy()
+        self.save_game_state(user_id, initial_state)
+        return initial_state
     
     def calculate_offline_earnings(self, game_state):
         """Calcula moedas geradas enquanto o usuário estava offline"""

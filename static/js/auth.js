@@ -1,5 +1,4 @@
-// static/js/auth.js - VERSÃO CORRIGIDA COMPLETA
-
+// static/js/auth.js - VERSÃO CORRIGIDA
 class AuthManager {
     constructor() {
         this.user = null;
@@ -8,54 +7,74 @@ class AuthManager {
         this.redirecting = false;
         this.setupAuthListeners();
         this.checkAuthStatus();
-        this.setupButtonListeners();
+        // CORREÇÃO: Remover setupButtonListeners duplicado
     }
 
-    setupButtonListeners() {
-        console.log('🔘 Configurando listeners dos botões...');
+    // CORREÇÃO: Remover setupButtonListeners duplicado - já está no DOMContentLoaded global
+
+    setupAuthListeners() {
+        console.log('🔥 Configurando observador do Firebase Auth...');
         
-        // Aguardar um pouco para garantir que o DOM está completamente carregado
-        setTimeout(() => {
-            // Botão de login - múltiplos seletores para garantir
-            const loginButton = document.getElementById('loginButton');
-            if (loginButton) {
-                console.log('✅ Botão de login encontrado via ID:', loginButton);
-                loginButton.addEventListener('click', (e) => {
-                    console.log('🎯 Botão de login CLICADO!');
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.loginWithGoogle();
-                });
-
+        firebase.auth().onAuthStateChanged(async (user) => {
+            console.log('🔄 Firebase auth state changed:', user ? `Logado: ${user.email}` : 'Deslogado');
+            
+            if (user) {
+                await this.handleUserLogin(user);
             } else {
-                console.error('❌ Botão de login NÃO encontrado via ID!');
-                
-                // Tentar encontrar por outros meios
-                const buttons = document.querySelectorAll('button');
-                console.log('🔍 Todos os botões na página:', buttons);
-                
-                buttons.forEach(btn => {
-                    if (btn.textContent.includes('Google') || btn.textContent.includes('Login')) {
-                        console.log('🔄 Encontrado botão potencial:', btn);
-                        btn.addEventListener('click', () => {
-                            console.log('🎯 Botão alternativo clicado!');
-                            this.loginWithGoogle();
-                        });
-                    }
-                });
+                this.handleUserLogout();
             }
+        });
+    }
 
-            // Botão de logout
-            const logoutButton = document.getElementById('logoutButton');
-            if (logoutButton) {
-                logoutButton.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    if (confirm('Tem certeza que deseja sair?')) {
-                        this.logout();
-                    }
-                });
+    async loginWithGoogle() {
+        try {
+            console.log('🔐 INICIANDO LOGIN COM GOOGLE...');
+            
+            const provider = new firebase.auth.GoogleAuthProvider();
+            provider.addScope('profile');
+            provider.addScope('email');
+            
+            // Forçar seleção de conta
+            provider.setCustomParameters({
+                prompt: 'select_account'
+            });
+            
+            console.log('🪟 Abrindo popup do Google...');
+            const result = await firebase.auth().signInWithPopup(provider);
+            console.log('✅ Login com Google bem-sucedido!', result.user.email);
+            return result.user;
+            
+        } catch (error) {
+            console.error('❌ ERRO NO LOGIN COM GOOGLE:', error);
+            
+            let errorMessage = 'Erro no login: ';
+            let showAlert = true;
+            
+            switch (error.code) {
+                case 'auth/popup-blocked':
+                    errorMessage += 'Popup bloqueado. Permita popups para este site.';
+                    break;
+                case 'auth/popup-closed-by-user':
+                    errorMessage += 'Popup fechado pelo usuário.';
+                    showAlert = false;
+                    break;
+                case 'auth/unauthorized-domain':
+                    errorMessage += 'Domínio não autorizado. Verifique as configurações do Firebase.';
+                    break;
+                case 'auth/network-request-failed':
+                    errorMessage += 'Erro de rede. Verifique sua conexão.';
+                    break;
+                default:
+                    errorMessage += error.message;
             }
-        }, 500);
+            
+            console.error('❌ Detalhes do erro:', error);
+            
+            if (showAlert) {
+                this.showMessage(errorMessage, 'error');
+            }
+            throw error;
+        }
     }
 
     setupAuthListeners() {
@@ -343,41 +362,76 @@ class AuthManager {
 let authManager;
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 DOM carregado, inicializando sistema de autenticação...');
+    console.log('🚀 DOM carregado, configurando botões Google...');
     
-    // CORREÇÃO ADICIONADA: Esconder a seção de login inicialmente
-    const loginSection = document.getElementById('login-section');
-    if (loginSection) {
-        loginSection.style.display = 'none';
+    // Configurar todos os botões Google
+    function setupGoogleButtons() {
+        // Selecionar por ID específico
+        const loginButton = document.getElementById('loginButton');
+        if (loginButton) {
+            console.log('✅ Botão loginButton encontrado');
+            loginButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('🎯 Botão loginButton clicado!');
+                if (window.authManager) {
+                    window.authManager.loginWithGoogle();
+                } else {
+                    console.error('❌ AuthManager não disponível');
+                    alert('Sistema de autenticação não carregado. Recarregue a página.');
+                }
+            });
+        }
+
+        // Selecionar por classe
+        const googleButtons = document.querySelectorAll('.btn-google');
+        googleButtons.forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('🎯 Botão Google (classe) clicado!');
+                if (window.authManager) {
+                    window.authManager.loginWithGoogle();
+                }
+            });
+        });
+
+        // Selecionar por texto
+        const allButtons = document.querySelectorAll('button');
+        allButtons.forEach(button => {
+            if (button.textContent.includes('Google') || button.textContent.includes('Entrar com')) {
+                if (!button.hasAttribute('data-google-bound')) {
+                    button.setAttribute('data-google-bound', 'true');
+                    button.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        console.log('🎯 Botão Google (texto) clicado!');
+                        if (window.authManager) {
+                            window.authManager.loginWithGoogle();
+                        }
+                    });
+                }
+            }
+        });
     }
-    
-    // Mostrar loading
-    const loadingElement = document.getElementById('auth-loading');
-    if (loadingElement) {
-        loadingElement.style.display = 'flex';
-        console.log('⏳ Loading de autenticação mostrado');
-    }
-    
-    // Aguardar o Firebase carregar completamente
+
+    // Executar imediatamente e também após 1 segundo (para conteúdo dinâmico)
+    setupGoogleButtons();
+    setTimeout(setupGoogleButtons, 1000);
+    setTimeout(setupGoogleButtons, 3000); // Backup
+
+    // Inicializar AuthManager
     setTimeout(() => {
         console.log('🎯 Criando AuthManager...');
-        authManager = new AuthManager();
-        window.authManager = authManager;
-        
+        window.authManager = new AuthManager();
         console.log('✅ Sistema de autenticação inicializado!');
-        console.log('💡 Dica: Clique no botão "Login com Google" para testar');
-        
-    }, 1000);
+    }, 500);
 });
 
-// Funções globais para compatibilidade com HTML onclick
-window.loginWithGoogle = () => {
+// Função global para compatibilidade
+window.loginWithGoogle = function() {
     console.log('🌐 Função global loginWithGoogle chamada');
     if (window.authManager) {
         window.authManager.loginWithGoogle();
     } else {
-        console.error('❌ AuthManager não inicializado ainda');
-        // Tentar inicializar se não estiver pronto
+        console.error('❌ AuthManager não inicializado');
         setTimeout(() => {
             if (window.authManager) {
                 window.authManager.loginWithGoogle();
