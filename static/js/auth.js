@@ -14,38 +14,52 @@ class AuthManager {
     setupButtonListeners() {
         console.log('🔘 Configurando listeners dos botões...');
         
-        // Botão de login
-        const loginButton = document.getElementById('loginButton');
-        if (loginButton) {
-            console.log('✅ Botão de login encontrado, adicionando listener...');
-            loginButton.addEventListener('click', () => {
-                console.log('🎯 Botão de login CLICADO!');
-                this.loginWithGoogle();
-            });
-        } else {
-            console.error('❌ Botão de login NÃO encontrado!');
-            // Tentar encontrar por classe ou outros seletores
-            const fallbackLoginBtn = document.querySelector('.btn-google, .btn-login, [onclick*="login"]');
-            if (fallbackLoginBtn) {
-                console.log('🔄 Encontrado botão alternativo:', fallbackLoginBtn);
-                fallbackLoginBtn.addEventListener('click', () => {
-                    console.log('🎯 Botão alternativo CLICADO!');
+        // Aguardar um pouco para garantir que o DOM está completamente carregado
+        setTimeout(() => {
+            // Botão de login - múltiplos seletores para garantir
+            const loginButton = document.getElementById('loginButton');
+            if (loginButton) {
+                console.log('✅ Botão de login encontrado via ID:', loginButton);
+                loginButton.addEventListener('click', (e) => {
+                    console.log('🎯 Botão de login CLICADO!');
+                    e.preventDefault();
+                    e.stopPropagation();
                     this.loginWithGoogle();
                 });
+                
+                // Estilo visual para debug
+                loginButton.style.border = '2px solid #00ff00';
+                loginButton.style.backgroundColor = '#4CAF50';
+            } else {
+                console.error('❌ Botão de login NÃO encontrado via ID!');
+                
+                // Tentar encontrar por outros meios
+                const buttons = document.querySelectorAll('button');
+                console.log('🔍 Todos os botões na página:', buttons);
+                
+                buttons.forEach(btn => {
+                    if (btn.textContent.includes('Google') || btn.textContent.includes('Login')) {
+                        console.log('🔄 Encontrado botão potencial:', btn);
+                        btn.addEventListener('click', () => {
+                            console.log('🎯 Botão alternativo clicado!');
+                            this.loginWithGoogle();
+                        });
+                    }
+                });
             }
-        }
 
-        // Botão de logout
-        const logoutButton = document.getElementById('logoutButton');
+            // Botão de logout
+            const logoutButton = document.getElementById('logoutButton');
         if (logoutButton) {
-            logoutButton.addEventListener('click', () => {
-                if (confirm('Tem certeza que deseja sair?')) {
-                    this.logout();
-                }
-            });
-        }
+                logoutButton.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (confirm('Tem certeza que deseja sair?')) {
+                        this.logout();
+                    }
+                });
+            }
+        }, 500);
     }
-
     setupAuthListeners() {
         console.log('🔥 Configurando observador do Firebase Auth...');
         
