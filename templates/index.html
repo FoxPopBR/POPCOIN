@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Bem-vindo ao PopCoin IDLE!</h2>
+    <p>Um jogo idle onde você coleta moedas e faz upgrades.</p>
+    
+    <div id="game-section" style="display: none;">
+        <h3>Jogo Carregado!</h3>
+        <p>Você está logado. <a href="{{ url_for('game') }}">Ir para o jogo</a></p>
+    </div>
+    
+    <div id="welcome-section">
+        <p>Faça login com Google para começar a jogar!</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Verificar status de autenticação ao carregar a página
+    document.addEventListener('DOMContentLoaded', function() {
+        checkAuthState();
+    });
+    
+    function checkAuthState() {
+        fetch('/api/auth/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.authenticated) {
+                    document.getElementById('game-section').style.display = 'block';
+                    document.getElementById('welcome-section').style.display = 'none';
+                } else {
+                    document.getElementById('game-section').style.display = 'none';
+                    document.getElementById('welcome-section').style.display = 'block';
+                }
+            });
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Jogar - PopCoin IDLE{% endblock %}
+
+{% block content %}
+<div class="game-container">
+    <div class="game-header">
+        <h2>PopCoin IDLE Game</h2>
+        <div class="game-stats">
+            <div class="stat">
+                <span class="stat-value" id="coins-count">0</span>
+                <span class="stat-label">PopCoins</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value" id="coins-per-click">1</span>
+                <span class="stat-label">Por Clique</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value" id="coins-per-second">0</span>
+                <span class="stat-label">Por Segundo</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value" id="prestige-level">0</span>
+                <span class="stat-label">Prestígio</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-main">
+        <div class="click-area">
+            <button id="click-button" class="coin-button">
+                <div class="coin-animation" id="coin-animation">🪙</div>
+                <span class="click-text">CLIQUE PARA GANHAR!</span>
+            </button>
+            <div class="click-bonus" id="click-bonus">+1</div>
+        </div>
+
+        <div class="game-panels">
+            <div class="panel upgrades-panel">
+                <h3>🏗️ Upgrades</h3>
+                <div class="upgrade-list">
+                    <div class="upgrade-item" data-upgrade="click_power">
+                        <div class="upgrade-info">
+                            <h4>Força do Clique</h4>
+                            <p>Aumenta moedas por clique</p>
+                            <div class="upgrade-stats">
+                                <span>Nível: <span id="click-power-level">1</span></span>
+                                <span>+<span id="click-power-bonus">1</span> por clique</span>
+                            </div>
+                        </div>
+                        <button class="buy-button" data-cost="10">
+                            Comprar - <span class="cost">10</span> 🪙
+                        </button>
+                    </div>
+
+                    <div class="upgrade-item" data-upgrade="auto_clicker">
+                        <div class="upgrade-info">
+                            <h4>Clique Automático</h4>
+                            <p>Gera moedas automaticamente</p>
+                            <div class="upgrade-stats">
+                                <span>Quantidade: <span id="auto-clicker-count">0</span></span>
+                                <span>+<span id="auto-clicker-bonus">0</span>/s</span>
+                            </div>
+                        </div>
+                        <button class="buy-button" data-cost="50">
+                            Comprar - <span class="cost">50</span> 🪙
+                        </button>
+                    </div>
+
+                    <div class="upgrade-item" data-upgrade="click_bot">
+                        <div class="upgrade-info">
+                            <h4>Bot de Clique</h4>
+                            <p>Robôs que clicam por você</p>
+                            <div class="upgrade-stats">
+                                <span>Quantidade: <span id="click-bot-count">0</span></span>
+                                <span>+<span id="click-bot-bonus">0</span>/s</span>
+                            </div>
+                        </div>
+                        <button class="buy-button" data-cost="500">
+                            Comprar - <span class="cost">500</span> 🪙
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel achievements-panel">
+                <h3>🏆 Conquistas</h3>
+                <div id="achievements-list">
+                    <div class="achievement locked">
+                        <span>💰 Primeiras Moedas</span>
+                        <span>Ganhe 100 moedas</span>
+                    </div>
+                    <div class="achievement locked">
+                        <span>⚡ Clique Rápido</span>
+                        <span>Faça 50 cliques</span>
+                    </div>
+                    <div class="achievement locked">
+                        <span>🏭 Industrial</span>
+                        <span>Tenha 10 upgrades</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <p>Carregando jogo...</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/game.js') }}"></script>
+{% endblock %}
