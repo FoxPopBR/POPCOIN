@@ -3,5 +3,5 @@ gunicorn==21.2.0
 psycopg2-binary==2.9.6
 python-dotenv==1.0.0
 firebase-admin==6.4.0
-requests==2.31.0
+requests==2.29.0  # Versão compatível com pyrebase4
 pyrebase4==4.7.1
