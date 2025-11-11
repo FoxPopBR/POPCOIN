@@ -4,62 +4,127 @@
 
 {% block content %}
 <div class="container">
-    <div class="hero-section">
+    <!-- Hero Section -->
+    <section class="hero-section fade-in">
         <h1>🎮 PopCoin IDLE</h1>
-        <p class="subtitle">Clique, colete moedas e evolua seu império!</p>
+        <p class="subtitle">Clique, colete moedas e evolua seu império digital!</p>
         
         <div class="features">
             <div class="feature">
                 <span class="feature-icon">🪙</span>
                 <h3>Colete Moedas</h3>
-                <p>Clique na moeda para ganhar PopCoins</p>
+                <p>Clique na moeda para ganhar PopCoins e construir sua fortuna</p>
             </div>
             
             <div class="feature">
                 <span class="feature-icon">⚡</span>
                 <h3>Faça Upgrades</h3>
-                <p>Melhore seu clique e gere moedas automáticas</p>
+                <p>Melhore seu clique e gere moedas automáticas 24/7</p>
             </div>
             
             <div class="feature">
                 <span class="feature-icon">🏆</span>
                 <h3>Desbloqueie Conquistas</h3>
-                <p>Complete desafios e mostre seu progresso</p>
+                <p>Complete desafios épicos e mostre seu progresso</p>
             </div>
         </div>
-    </div>
+    </section>
 
-    <div id="game-section" class="game-section" style="display: none;">
-        <div class="welcome-back">
+    <!-- Seção para usuários logados -->
+    <div id="game-section" class="hidden">
+        <div class="auth-card text-center">
             <h2>🎉 Bem-vindo de volta!</h2>
-            <p>Seu jogo está pronto para continuar.</p>
-            <a href="{{ url_for('game') }}" class="btn btn-primary btn-large">
+            <p>Seu império aguarda por você. Continue sua jornada!</p>
+            <a href="{{ url_for('game') }}" class="btn btn-primary btn-large mt-2">
                 🎮 Continuar Jogando
             </a>
         </div>
     </div>
     
-    <div id="welcome-section" class="welcome-section">
+    <!-- Seção de boas-vindas para novos usuários -->
+    <div id="welcome-section">
         <div class="auth-card">
-            <h2>🚀 Comece a Jogar</h2>
-            <p>Faça login com sua conta Google para salvar seu progresso e competir com amigos!</p>
+            <h2>🚀 Comece Sua Jornada</h2>
+            <p class="mb-2">Junte-se a milhares de jogadores e construa seu império de moedas!</p>
             
-            <div class="auth-actions">
-                <!-- CORREÇÃO: Usar o mesmo ID que o auth.js procura -->
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login">Entrar</button>
+                <button class="auth-tab" data-tab="register">Cadastrar</button>
+            </div>
+            
+            <!-- Formulário de Login -->
+            <div id="login-form" class="auth-form">
+                <div class="form-group">
+                    <label for="login-email">E-mail:</label>
+                    <input type="email" id="login-email" placeholder="seu@email.com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="login-password">Senha:</label>
+                    <input type="password" id="login-password" placeholder="Sua senha">
+                </div>
+                
+                <button class="btn btn-primary" onclick="loginWithEmail()">
+                    🔐 Entrar com E-mail
+                </button>
+                
+                <div class="text-center mt-1">
+                    <button class="btn btn-secondary" onclick="resetPassword()">
+                        🔑 Esqueci minha senha
+                    </button>
+                </div>
+                
+                <div class="separator">ou</div>
+                
                 <button id="loginButton" class="btn btn-google">
-                    <span class="btn-icon">🔐</span>
+                    <span class="btn-icon">🔗</span>
                     Entrar com Google
                 </button>
             </div>
             
-            <div class="game-preview">
-                <h4>📊 O que esperar:</h4>
+            <!-- Formulário de Registro -->
+            <div id="register-form" class="auth-form hidden">
+                <div class="form-group">
+                    <label for="register-name">Nome completo:</label>
+                    <input type="text" id="register-name" placeholder="Seu nome completo">
+                </div>
+                
+                <div class="form-group">
+                    <label for="register-email">E-mail:</label>
+                    <input type="email" id="register-email" placeholder="seu@email.com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="register-password">Senha:</label>
+                    <input type="password" id="register-password" placeholder="Mínimo 6 caracteres">
+                </div>
+                
+                <div class="form-group">
+                    <label for="register-confirm">Confirmar senha:</label>
+                    <input type="password" id="register-confirm" placeholder="Digite novamente">
+                </div>
+                
+                <button class="btn btn-primary" onclick="registerWithEmail()">
+                    📝 Criar Conta
+                </button>
+                
+                <div class="separator">ou</div>
+                
+                <button class="btn btn-google" onclick="loginWithGoogle()">
+                    <span class="btn-icon">🔗</span>
+                    Cadastrar com Google
+                </button>
+            </div>
+            
+            <div class="game-preview mt-2">
+                <h4>🎯 O que você ganha:</h4>
                 <ul>
-                    <li>✅ Progresso salvo automaticamente</li>
-                    <li>✅ Ganhos mesmo offline</li>
-                    <li>✅ Sistema de conquistas</li>
-                    <li>✅ Upgrades e evolução</li>
+                    <li>✅ Progresso salvo na nuvem</li>
+                    <li>✅ Ganhos automáticos offline</li>
+                    <li>✅ Sistema de conquistas exclusivas</li>
+                    <li>✅ Upgrades e evolução contínua</li>
                     <li>✅ Multiplicadores de prestígio</li>
+                    <li>✅ Ranking com outros jogadores</li>
                 </ul>
             </div>
         </div>
@@ -69,28 +134,52 @@
 
 {% block scripts %}
 <script>
+// Sistema de abas
+document.addEventListener('DOMContentLoaded', function() {
+    const tabs = document.querySelectorAll('.auth-tab');
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    
+    tabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+            const tabName = this.dataset.tab;
+            
+            // Ativar aba clicada
+            tabs.forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Mostrar formulário correspondente
+            if (tabName === 'login') {
+                loginForm.classList.remove('hidden');
+                registerForm.classList.add('hidden');
+            } else {
+                loginForm.classList.add('hidden');
+                registerForm.classList.remove('hidden');
+            }
+        });
+    });
+});
+
 // Sistema de atualização de UI para a página inicial
 function updatePageSections() {
     const gameSection = document.getElementById('game-section');
     const welcomeSection = document.getElementById('welcome-section');
     
     if (window.authManager && window.authManager.isAuthenticated) {
-        if (gameSection) gameSection.style.display = 'block';
-        if (welcomeSection) welcomeSection.style.display = 'none';
+        if (gameSection) gameSection.classList.remove('hidden');
+        if (welcomeSection) welcomeSection.classList.add('hidden');
     } else {
-        if (gameSection) gameSection.style.display = 'none';
-        if (welcomeSection) welcomeSection.style.display = 'block';
+        if (gameSection) gameSection.classList.add('hidden');
+        if (welcomeSection) welcomeSection.classList.remove('hidden');
     }
 }
 
 // Observar mudanças no estado de autenticação
 document.addEventListener('DOMContentLoaded', function() {
-    // Verificar periodicamente até o authManager estar pronto
     const checkAuthReady = setInterval(() => {
         if (window.authManager) {
             clearInterval(checkAuthReady);
             
-            // Sobrescrever a função updateUI para incluir nossa lógica
             const originalUpdateUI = window.authManager.updateUI;
             window.authManager.updateUI = function(user) {
                 if (originalUpdateUI) {
@@ -99,107 +188,96 @@ document.addEventListener('DOMContentLoaded', function() {
                 updatePageSections();
             };
             
-            // Atualizar inicialmente
             updatePageSections();
         }
     }, 100);
 });
+
+// Funções de autenticação por email (serão implementadas no auth.js)
+function loginWithEmail() {
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    
+    if (!email || !password) {
+        alert('Por favor, preencha todos os campos');
+        return;
+    }
+    
+    if (window.authManager) {
+        window.authManager.loginWithEmail(email, password);
+    }
+}
+
+function registerWithEmail() {
+    const name = document.getElementById('register-name').value;
+    const email = document.getElementById('register-email').value;
+    const password = document.getElementById('register-password').value;
+    const confirm = document.getElementById('register-confirm').value;
+    
+    if (!name || !email || !password || !confirm) {
+        alert('Por favor, preencha todos os campos');
+        return;
+    }
+    
+    if (password !== confirm) {
+        alert('As senhas não coincidem');
+        return;
+    }
+    
+    if (password.length < 6) {
+        alert('A senha deve ter pelo menos 6 caracteres');
+        return;
+    }
+    
+    if (window.authManager) {
+        window.authManager.registerWithEmail(name, email, password);
+    }
+}
+
+function resetPassword() {
+    const email = prompt('Digite seu e-mail para redefinir a senha:');
+    if (email && window.authManager) {
+        window.authManager.resetPassword(email);
+    }
+}
 </script>
 
 <style>
-.hero-section {
+.separator {
     text-align: center;
-    padding: 2rem 0;
-}
-
-.hero-section h1 {
-    font-size: 3rem;
-    margin-bottom: 0.5rem;
-    background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.subtitle {
-    font-size: 1.2rem;
+    margin: 1rem 0;
+    position: relative;
     color: #666;
-    margin-bottom: 2rem;
 }
 
-.features {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 2rem;
-    margin: 3rem 0;
+.separator::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: #e9ecef;
+    z-index: 1;
 }
 
-.feature {
-    text-align: center;
-    padding: 1.5rem;
-    border-radius: 10px;
-    background: #f8f9fa;
-    border: 1px solid #e9ecef;
-}
-
-.feature-icon {
-    font-size: 2.5rem;
-    display: block;
-    margin-bottom: 1rem;
-}
-
-.auth-card {
-    max-width: 400px;
-    margin: 2rem auto;
-    padding: 2rem;
+.separator span {
     background: white;
-    border-radius: 15px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-    text-align: center;
+    padding: 0 1rem;
+    position: relative;
+    z-index: 2;
 }
 
-.btn-google {
-    background: #4285f4;
-    color: white;
-    border: none;
-    padding: 1rem 2rem;
-    font-size: 1.1rem;
-    border-radius: 25px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.btn-google:hover {
-    background: #3367d6;
-    transform: translateY(-2px);
-}
-
-.btn-large {
-    padding: 1rem 2rem;
-    font-size: 1.1rem;
-}
-
-.btn-icon {
-    margin-right: 0.5rem;
-}
-
-.game-preview {
-    margin-top: 2rem;
-    text-align: left;
-}
-
-.game-preview ul {
-    list-style: none;
-    padding: 0;
-}
-
-.game-preview li {
-    padding: 0.3rem 0;
-    color: #28a745;
-}
-
-.welcome-back {
-    text-align: center;
-    padding: 3rem;
+.mobile-open {
+    display: flex !important;
+    flex-direction: column;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--secondary-color);
+    padding: 1rem;
+    box-shadow: var(--shadow);
 }
 </style>
 {% endblock %}

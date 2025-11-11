@@ -12,27 +12,36 @@
 <body>
     <div id="app">
         <header class="main-header">
-            <div class="header-content">
-                <h1>🎮 PopCoin IDLE</h1>
-                <div id="auth-section">
-                    <!-- Loading durante verificação -->
-                    <div id="auth-loading" class="auth-loading" style="display: flex;">
-                        <div class="loading-spinner"></div>
-                        <span>Verificando login...</span>
+            <div class="container">
+                <div class="header-content">
+                    <div class="logo-section">
+                        <h1>🎮 PopCoin IDLE</h1>
                     </div>
                     
-                    <!-- Usuário logado -->
-                    <div id="user-info" style="display: none;">
-                        <img id="user-pic" src="" alt="Foto" class="user-avatar">
-                        <span id="user-name" class="user-name"></span>
-                        <button id="logoutButton" class="btn-logout">🚪 Sair</button>
-                    </div>
+                    <button class="mobile-menu-btn" id="mobileMenuBtn">
+                        ☰
+                    </button>
                     
-                    <!-- Login -->
-                    <div id="login-section" style="display: none;">
-                        <button id="loginButton" class="btn-login">
-                            🔑 Entrar com Google
-                        </button>
+                    <div id="auth-section">
+                        <!-- Loading durante verificação -->
+                        <div id="auth-loading" class="auth-loading">
+                            <div class="loading-spinner"></div>
+                            <span>Verificando login...</span>
+                        </div>
+                        
+                        <!-- Usuário logado -->
+                        <div id="user-info" class="hidden">
+                            <img id="user-pic" src="" alt="Foto" class="user-avatar">
+                            <span id="user-name" class="user-name"></span>
+                            <button id="logoutButton" class="btn-logout">🚪 Sair</button>
+                        </div>
+                        
+                        <!-- Login -->
+                        <div id="login-section" class="hidden">
+                            <button id="loginButton" class="btn-login">
+                                🔑 Entrar
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -43,7 +52,9 @@
         </main>
 
         <footer class="main-footer">
-            <p>PopCoin IDLE &copy; 2024</p>
+            <div class="container">
+                <p>PopCoin IDLE &copy; 2024 - Desenvolvido com ❤️ para jogadores ociosos</p>
+            </div>
         </footer>
     </div>
 
@@ -62,82 +73,21 @@
         firebase.initializeApp(firebaseConfig);
     </script>
     
-    <!-- CORREÇÃO: Alterado para auth.js -->
     <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
     {% block scripts %}{% endblock %}
 
-    <style>
-        .main-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 1rem 0;
-        }
-
-        .header-content {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 1rem;
-        }
-
-        .btn-login, .btn-logout {
-            background: rgba(255,255,255,0.2);
-            border: 2px solid rgba(255,255,255,0.3);
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 25px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s ease;
-        }
-
-        .btn-login:hover, .btn-logout:hover {
-            background: rgba(255,255,255,0.3);
-        }
-
-        .user-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            margin-right: 0.5rem;
-        }
-
-        .main-content {
-            min-height: calc(100vh - 120px);
-            padding: 2rem 1rem;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .main-footer {
-            text-align: center;
-            padding: 1rem;
-            background: #f8f9fa;
-            color: #666;
-        }
-
-        .auth-loading {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: white;
-        }
-
-        .loading-spinner {
-            border: 2px solid rgba(255,255,255,0.3);
-            border-radius: 50%;
-            border-top: 2px solid white;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
+    <script>
+        // Menu Mobile
+        document.addEventListener('DOMContentLoaded', function() {
+            const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+            const authSection = document.getElementById('auth-section');
+            
+            if (mobileMenuBtn && authSection) {
+                mobileMenuBtn.addEventListener('click', function() {
+                    authSection.classList.toggle('mobile-open');
+                });
+            }
+        });
+    </script>
 </body>
 </html>
