@@ -50,9 +50,9 @@ def game():
     return render_template('game.html', firebase_config=FIREBASE_CONFIG)
 
 # API Routes
-@app.route('/api/game/state')
+@app.route('/api/game/state', methods=['GET', 'POST'])  # ← CORRIGIDO: Adicionar POST
 def get_game_state():
-    """Obter estado atual do jogo"""
+    """Obter ou salvar estado atual do jogo"""
     if not game_manager:
         return jsonify({"coins": 0, "coins_per_click": 1, "coins_per_second": 0})
     
@@ -61,8 +61,14 @@ def get_game_state():
         return jsonify({"error": "Não autenticado"}), 401
     
     try:
-        game_state = game_manager.get_user_game_state(user_id)
-        return jsonify(game_state)
+        if request.method == 'GET':
+            game_state = game_manager.get_user_game_state(user_id)
+            return jsonify(game_state)
+        elif request.method == 'POST':
+            # Salvar estado do jogo recebido do frontend
+            game_data = request.json
+            game_manager.save_game_state(user_id, game_data)
+            return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

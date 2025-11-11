@@ -49,15 +49,16 @@ class PopCoinGame {
 
     async saveGameState() {
         try {
-            await fetch('/api/game/state', {
-                method: 'POST',
+            await fetch('/api/game/state', {  // ← Já está correto
+                method: 'POST',  // ← Já está correto
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(this.gameState)
             });
+            console.log('✅ Game state saved');
         } catch (error) {
-            console.error('Erro ao salvar jogo:', error);
+            console.error('❌ Erro ao salvar jogo:', error);
         }
     }
 

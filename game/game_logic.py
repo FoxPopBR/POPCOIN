@@ -23,9 +23,14 @@ class GameManager:
     def get_user_game_state(self, user_id):
         """Recupera o estado do jogo do usuário do banco de dados"""
         conn = get_db_connection()
+        if not conn:
+            print("❌ No database connection in get_user_game_state")
+            return self.default_game_state.copy()
+            
         cur = conn.cursor()
         
         try:
+            # CORREÇÃO: Usar placeholder correto para PostgreSQL
             cur.execute(
                 'SELECT game_data FROM user_game_states WHERE user_id = %s',
                 (user_id,)
@@ -33,16 +38,18 @@ class GameManager:
             result = cur.fetchone()
             
             if result:
-                game_state = json.loads(result[0])
+                game_state = json.loads(result[0])  # PostgreSQL retorna como tuple
                 # Calcular moedas geradas offline
                 game_state = self.calculate_offline_earnings(game_state)
+                print(f"✅ Game state loaded for user {user_id}")
                 return game_state
             else:
                 # Primeiro acesso - criar estado inicial
+                print(f"🆕 Creating initial game state for user {user_id}")
                 return self.create_initial_game_state(user_id)
                 
         except Exception as e:
-            print(f"Erro ao buscar estado do jogo: {e}")
+            print(f"❌ Erro ao buscar estado do jogo: {e}")
             return self.default_game_state.copy()
         finally:
             cur.close()
@@ -57,10 +64,15 @@ class GameManager:
     def save_game_state(self, user_id, game_state):
         """Salva o estado do jogo no banco de dados"""
         conn = get_db_connection()
+        if not conn:
+            print("❌ No database connection in save_game_state")
+            return
+            
         cur = conn.cursor()
         
         try:
             game_state_json = json.dumps(game_state)
+            # CORREÇÃO: Usar placeholder correto para PostgreSQL
             cur.execute(
                 '''INSERT INTO user_game_states (user_id, game_data) 
                    VALUES (%s, %s)
@@ -69,8 +81,9 @@ class GameManager:
                 (user_id, game_state_json)
             )
             conn.commit()
+            print(f"✅ Game state saved for user {user_id}")
         except Exception as e:
-            print(f"Erro ao salvar estado do jogo: {e}")
+            print(f"❌ Erro ao salvar estado do jogo: {e}")
             conn.rollback()
         finally:
             cur.close()
