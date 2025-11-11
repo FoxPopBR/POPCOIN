@@ -47,7 +47,7 @@ def game():
     """Página principal do jogo"""
     if not session.get('user_authenticated'):
         return redirect(url_for('index'))
-    return render_template('game.html')
+    return render_template('game.html', firebase_config=FIREBASE_CONFIG)
 
 # API Routes
 @app.route('/api/game/state')
