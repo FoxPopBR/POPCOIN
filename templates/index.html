@@ -1,15 +1,9 @@
-<!-- templates/index.html - BOTÕES CORRETOS -->
 {% extends "base.html" %}
 
 {% block title %}PopCoin IDLE - Início{% endblock %}
 
 {% block content %}
 <div class="container">
-    <!-- Loading Overlay para login -->
-    <div id="loading-overlay-index" style="display: none;">
-        <!-- Será criado dinamicamente pelo JavaScript -->
-    </div>
-
     <!-- Hero Section -->
     <section class="hero-section fade-in">
         <h1>🎮 PopCoin IDLE</h1>
@@ -71,12 +65,12 @@
                 </div>
                 
                 <!-- BOTÃO CORRETO: Email Login -->
-                <button type="button" class="btn btn-primary email-login-btn">
+                <button type="button" class="btn btn-primary" onclick="handleEmailLogin()">
                     🔐 Entrar com E-mail
                 </button>
                 
                 <div class="text-center mt-1">
-                    <button type="button" class="btn btn-secondary" onclick="window.authManager?.resetPassword()">
+                    <button type="button" class="btn btn-secondary" onclick="handleResetPassword()">
                         🔑 Esqueci minha senha
                     </button>
                 </div>
@@ -84,7 +78,7 @@
                 <div class="separator">ou</div>
                 
                 <!-- BOTÃO CORRETO: Google Login -->
-                <button type="button" class="btn btn-google google-login-btn">
+                <button type="button" class="btn btn-google" onclick="handleGoogleLogin()">
                     <span class="btn-icon">🔗</span>
                     Entrar com Google
                 </button>
@@ -113,14 +107,14 @@
                 </div>
                 
                 <!-- BOTÃO CORRETO: Email Register -->
-                <button type="button" class="btn btn-primary email-register-btn">
+                <button type="button" class="btn btn-primary" onclick="handleEmailRegister()">
                     📝 Criar Conta
                 </button>
                 
                 <div class="separator">ou</div>
                 
                 <!-- BOTÃO CORRETO: Google Register -->
-                <button type="button" class="btn btn-google google-register-btn">
+                <button type="button" class="btn btn-google" onclick="handleGoogleLogin()">
                     <span class="btn-icon">🔗</span>
                     Cadastrar com Google
                 </button>
@@ -202,6 +196,69 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, 100);
 });
+
+// Funções de handler simplificadas
+function handleEmailLogin() {
+    if (window.authManager && window.authManager.loginWithEmail) {
+        window.authManager.loginWithEmail();
+    } else {
+        showGlobalLoading('Carregando sistema...');
+        setTimeout(() => {
+            if (window.authManager && window.authManager.loginWithEmail) {
+                window.authManager.loginWithEmail();
+            } else {
+                hideGlobalLoading();
+                alert('Sistema de autenticação não carregado. Recarregue a página.');
+            }
+        }, 1000);
+    }
+}
+
+function handleEmailRegister() {
+    if (window.authManager && window.authManager.registerWithEmail) {
+        window.authManager.registerWithEmail();
+    } else {
+        showGlobalLoading('Carregando sistema...');
+        setTimeout(() => {
+            if (window.authManager && window.authManager.registerWithEmail) {
+                window.authManager.registerWithEmail();
+            } else {
+                hideGlobalLoading();
+                alert('Sistema de autenticação não carregado. Recarregue a página.');
+            }
+        }, 1000);
+    }
+}
+
+function handleGoogleLogin() {
+    if (window.authManager && window.authManager.loginWithGoogle) {
+        window.authManager.loginWithGoogle();
+    } else {
+        showGlobalLoading('Carregando sistema...');
+        setTimeout(() => {
+            if (window.authManager && window.authManager.loginWithGoogle) {
+                window.authManager.loginWithGoogle();
+            } else {
+                hideGlobalLoading();
+                alert('Sistema de autenticação não carregado. Recarregue a página.');
+            }
+        }, 1000);
+    }
+}
+
+function handleResetPassword() {
+    if (window.authManager && window.authManager.resetPassword) {
+        window.authManager.resetPassword();
+    } else {
+        alert('Sistema de autenticação não carregado. Recarregue a página.');
+    }
+}
+
+// Expor funções globalmente
+window.handleEmailLogin = handleEmailLogin;
+window.handleEmailRegister = handleEmailRegister;
+window.handleGoogleLogin = handleGoogleLogin;
+window.handleResetPassword = handleResetPassword;
 </script>
 
 <style>

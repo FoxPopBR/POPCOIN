@@ -8,11 +8,7 @@
     <div class="game-header">
         <div class="game-title">
             <h1>🎮 PopCoin IDLE</h1>
-            <div class="user-info" id="user-info">
-                <img id="user-pic" src="" alt="Foto" class="user-avatar">
-                <span id="user-name" class="user-name"></span>
-                <button onclick="logout()" class="btn btn-logout">🚪 Sair</button>
-            </div>
+            <!-- REMOVIDO: user-info duplicado - já está no base.html -->
         </div>
         
         <div class="game-stats">
@@ -25,7 +21,7 @@
                 <div class="stat-label">⚡ Por Clique</div>
             </div>
             <div class="stat-card">
-                <div class="stat-value" id="coins-per-second">0</div>
+                <div class="stat-value" id="coins-per-second">0.0</div>
                 <div class="stat-label">🔄 Por Segundo</div>
             </div>
             <div class="stat-card">
@@ -68,7 +64,7 @@
                                 <span>Bônus: +<strong id="click-power-bonus">1</strong> por clique</span>
                             </div>
                         </div>
-                        <button class="buy-button" data-cost="10">
+                        <button class="buy-button" data-cost="10" data-upgrade-type="click_power">
                             Comprar - <span class="cost">10</span> 🪙
                         </button>
                     </div>
@@ -79,10 +75,10 @@
                             <p>Gera moedas automaticamente a cada segundo</p>
                             <div class="upgrade-stats">
                                 <span>Quantidade: <strong id="auto-clicker-count">0</strong></span>
-                                <span>Produção: +<strong id="auto-clicker-bonus">0</strong>/s</span>
+                                <span>Produção: +<strong id="auto-clicker-bonus">0.0</strong>/s</span>
                             </div>
                         </div>
-                        <button class="buy-button" data-cost="50">
+                        <button class="buy-button" data-cost="50" data-upgrade-type="auto_clicker">
                             Comprar - <span class="cost">50</span> 🪙
                         </button>
                     </div>
@@ -93,10 +89,10 @@
                             <p>Robôs avançados que geram mais moedas</p>
                             <div class="upgrade-stats">
                                 <span>Quantidade: <strong id="click-bot-count">0</strong></span>
-                                <span>Produção: +<strong id="click-bot-bonus">0</strong>/s</span>
+                                <span>Produção: +<strong id="click-bot-bonus">0.0</strong>/s</span>
                             </div>
                         </div>
-                        <button class="buy-button" data-cost="500">
+                        <button class="buy-button" data-cost="500" data-upgrade-type="click_bot">
                             Comprar - <span class="cost">500</span> 🪙
                         </button>
                     </div>
@@ -136,17 +132,12 @@
     </div>
 </div>
 
-<!-- Loading Overlay -->
-<div id="loading-overlay" class="loading-overlay">
+<!-- Loading Overlay do Jogo -->
+<div id="game-loading-overlay" class="loading-overlay">
     <div class="loading-content">
         <div class="loading-spinner"></div>
         <h3>Carregando PopCoin IDLE...</h3>
         <p>Preparando sua aventura de coleta de moedas!</p>
-        <div class="loading-progress">
-            <div class="progress-bar">
-                <div class="progress-fill"></div>
-            </div>
-        </div>
     </div>
 </div>
 {% endblock %}
@@ -155,6 +146,7 @@
 <script src="{{ url_for('static', filename='js/game.js') }}"></script>
 
 <style>
+/* ESTILOS ESPECÍFICOS DO JOGO - EVITAR CONFLITO COM BASE.CSS */
 .game-container {
     max-width: 1200px;
     margin: 0 auto;
@@ -180,33 +172,6 @@
 .game-title h1 {
     margin: 0;
     font-size: 2rem;
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.user-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: 2px solid white;
-}
-
-.user-name {
-    font-weight: bold;
-}
-
-.btn-logout {
-    background: rgba(255,255,255,0.2);
-    border: 1px solid rgba(255,255,255,0.3);
-    color: white;
-}
-
-.btn-logout:hover {
-    background: rgba(255,255,255,0.3);
 }
 
 .game-stats {
@@ -246,6 +211,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    position: relative;
 }
 
 .coin-button {
@@ -295,6 +261,7 @@
     color: #ffd700;
     opacity: 0;
     transition: all 1s ease;
+    pointer-events: none;
 }
 
 .click-bonus.show {
@@ -384,6 +351,12 @@
 .buy-button:disabled {
     background: #6c757d;
     cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.buy-button.cant-afford {
+    background: #6c757d;
+    opacity: 0.6;
 }
 
 .achievements-list {
@@ -457,7 +430,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 9999;
+    z-index: 9998;
 }
 
 .loading-content {
@@ -475,31 +448,9 @@
     margin: 0 auto 2rem;
 }
 
-.progress-bar {
-    width: 100%;
-    height: 8px;
-    background: rgba(255,255,255,0.2);
-    border-radius: 4px;
-    margin-top: 1rem;
-    overflow: hidden;
-}
-
-.progress-fill {
-    height: 100%;
-    background: white;
-    border-radius: 4px;
-    animation: progress 2s ease-in-out infinite;
-}
-
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
-}
-
-@keyframes progress {
-    0% { width: 0%; }
-    50% { width: 70%; }
-    100% { width: 100%; }
 }
 
 /* Responsividade */
@@ -516,6 +467,15 @@
         flex-direction: column;
         text-align: center;
         gap: 1rem;
+    }
+    
+    .coin-button {
+        width: 150px;
+        height: 150px;
+    }
+    
+    .coin-animation {
+        font-size: 3rem;
     }
 }
 </style>
