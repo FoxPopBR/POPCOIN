@@ -243,35 +243,31 @@ class PopCoinGame {
             // Aplicar upgrade
             this.gameState.upgrades[upgradeType] = currentLevel + 1;
             
+            // CORREÇÃO: Sistema de CPS funcionando corretamente
             switch (upgradeType) {
                 case 'click_power':
                     this.gameState.coins_per_click = 1 + this.gameState.upgrades.click_power;
                     break;
                     
                 case 'auto_clicker':
-                    this.gameState.coins_per_second = 0.1 * this.gameState.upgrades.auto_clickers;
+                    // CORREÇÃO: Cada auto_clicker adiciona 0.1 moedas/segundo
+                    this.gameState.coins_per_second = this.gameState.upgrades.auto_clickers * 0.1;
                     break;
                     
                 case 'click_bot':
-                    this.gameState.coins_per_second += 0.5; // Cada bot adiciona 0.5/s
+                    // CORREÇÃO: Cada click_bot adiciona 0.5 moedas/segundo
+                    this.gameState.coins_per_second = (this.gameState.upgrades.auto_clickers * 0.1) + 
+                                                     (this.gameState.upgrades.click_bots * 0.5);
                     break;
             }
             
-            // Efeitos visuais
             this.showMessage(`✅ Upgrade comprado: ${this.getUpgradeName(upgradeType)} Nv. ${this.gameState.upgrades[upgradeType]}`, 'success');
-            
-            // Atualizar UI
             this.updateUI();
-            
-            // Verificar conquistas
             this.checkAchievements();
-            
-            // Salvar estado
             await this.saveGameState();
             
         } else {
             this.showMessage('❌ Moedas insuficientes!', 'error');
-            // Efeito visual de shake no botão
             const button = document.querySelector(`[data-upgrade="${upgradeType}"] .buy-button`);
             if (button) {
                 button.classList.add('shake');
@@ -468,19 +464,19 @@ class PopCoinGame {
 
     startGameLoop() {
         this.gameLoopInterval = setInterval(() => {
-            // Gerar moedas automáticas
+            // CORREÇÃO: Gerar moedas automáticas de forma consistente
             if (this.gameState.coins_per_second > 0) {
-                const autoEarnings = this.gameState.coins_per_second / 10; // Dividido por 10 porque roda 10x por segundo
+                const autoEarnings = this.gameState.coins_per_second / 10; // 10 updates por segundo
                 
                 this.gameState.coins += autoEarnings;
                 this.gameState.total_coins += autoEarnings;
                 
-                // Atualizar a cada 10 frames para performance
-                if (Math.random() < 0.1) {
+                // Atualizar UI a cada segundo para performance
+                if (Date.now() % 1000 < 100) { // Aproximadamente 1x por segundo
                     this.updateUI();
                 }
             }
-        }, 100); // Atualizar a cada 100ms para animação suave
+        }, 100);
     }
 
     startAutoSave() {
