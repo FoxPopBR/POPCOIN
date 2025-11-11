@@ -1,5 +1,4 @@
 // Gerenciamento de autenticação
-
 class AuthManager {
     constructor() {
         this.user = null;
@@ -8,13 +7,13 @@ class AuthManager {
     }
 
     initFirebase() {
-        // Firebase já inicializado no base.html
-        console.log('Firebase inicializado');
+        console.log('Firebase configurado, aguardando inicialização...');
     }
 
     setupAuthListeners() {
         // Observar mudanças no estado de autenticação
         firebase.auth().onAuthStateChanged((user) => {
+            console.log('Estado de autenticação alterado:', user);
             if (user) {
                 this.handleUserLogin(user);
             } else {
@@ -24,12 +23,14 @@ class AuthManager {
     }
 
     async handleUserLogin(user) {
+        console.log('Usuário logado no Firebase:', user);
         this.user = user;
         
-        // Obter token do Firebase
-        const token = await user.getIdToken();
-        
         try {
+            // Obter token do Firebase
+            const token = await user.getIdToken();
+            console.log('Token obtido, enviando para servidor...');
+            
             // Enviar token para o servidor
             const response = await fetch('/api/auth/login', {
                 method: 'POST',
@@ -40,6 +41,7 @@ class AuthManager {
             });
 
             const result = await response.json();
+            console.log('Resposta do servidor:', result);
             
             if (result.success) {
                 this.updateUI(user);
@@ -52,15 +54,17 @@ class AuthManager {
                     }, 1000);
                 }
             } else {
-                console.error('Erro no login:', result.error);
-                this.handleUserLogout();
+                console.error('Erro no login no servidor:', result.error);
+                await this.logout();
             }
         } catch (error) {
             console.error('Erro ao comunicar com servidor:', error);
+            alert('Erro de comunicação com o servidor: ' + error.message);
         }
     }
 
     handleUserLogout() {
+        console.log('Usuário deslogado');
         this.user = null;
         this.updateUI(null);
         
@@ -78,8 +82,13 @@ class AuthManager {
 
         if (user) {
             // Usuário logado
-            userPic.src = user.photoURL || '/static/images/default-avatar.png';
-            userName.textContent = user.displayName || 'Usuário';
+            if (user.photoURL) {
+                userPic.src = user.photoURL;
+                userPic.style.display = 'inline';
+            } else {
+                userPic.style.display = 'none';
+            }
+            userName.textContent = user.displayName || user.email || 'Usuário';
             userInfo.style.display = 'flex';
             loginSection.style.display = 'none';
         } else {
@@ -92,15 +101,40 @@ class AuthManager {
     // Login com Google
     async loginWithGoogle() {
         try {
+            console.log('Iniciando login com Google...');
+            
             const provider = new firebase.auth.GoogleAuthProvider();
             provider.addScope('profile');
             provider.addScope('email');
             
+            console.log('Abrindo popup de autenticação...');
             const result = await firebase.auth().signInWithPopup(provider);
+            console.log('Login com Google bem-sucedido:', result.user);
             return result.user;
         } catch (error) {
-            console.error('Erro no login com Google:', error);
-            alert('Erro no login: ' + error.message);
+            console.error('Erro detalhado no login com Google:', error);
+            
+            // Tratamento específico de erros
+            let errorMessage = 'Erro no login: ';
+            
+            switch (error.code) {
+                case 'auth/popup-blocked':
+                    errorMessage += 'Popup bloqueado pelo navegador. Por favor, permita popups para este site.';
+                    break;
+                case 'auth/popup-closed-by-user':
+                    errorMessage += 'Popup fechado pelo usuário.';
+                    break;
+                case 'auth/unauthorized-domain':
+                    errorMessage += 'Domínio não autorizado. Verifique as configurações do Firebase.';
+                    break;
+                case 'auth/network-request-failed':
+                    errorMessage += 'Erro de rede. Verifique sua conexão.';
+                    break;
+                default:
+                    errorMessage += error.message;
+            }
+            
+            alert(errorMessage);
             throw error;
         }
     }
@@ -108,6 +142,7 @@ class AuthManager {
     // Logout
     async logout() {
         try {
+            console.log('Fazendo logout...');
             // Fazer logout no Firebase
             await firebase.auth().signOut();
             
@@ -137,15 +172,24 @@ class AuthManager {
 const authManager = new AuthManager();
 
 // Funções globais para os botões HTML
-window.loginWithGoogle = () => authManager.loginWithGoogle();
-window.logout = () => authManager.logout();
+window.loginWithGoogle = () => {
+    console.log('Botão login clicado');
+    authManager.loginWithGoogle();
+};
+
+window.logout = () => {
+    console.log('Botão logout clicado');
+    authManager.logout();
+};
 
 // Verificar status ao carregar a página
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log('Página carregada, verificando autenticação...');
     const authStatus = await authManager.checkAuthStatus();
+    console.log('Status de autenticação:', authStatus);
     
     if (authStatus.authenticated && window.location.pathname === '/') {
-        // Se já estiver autenticado e na página inicial, redirecionar para o jogo
+        console.log('Usuário já autenticado, redirecionando para /game');
         window.location.href = '/game';
     }
 });
