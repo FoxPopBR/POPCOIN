@@ -45,6 +45,7 @@
             <p>Faça login com sua conta Google para salvar seu progresso e competir com amigos!</p>
             
             <div class="auth-actions">
+                <!-- CORREÇÃO: Usar o mesmo ID que o auth.js procura -->
                 <button id="loginButton" class="btn btn-google">
                     <span class="btn-icon">🔐</span>
                     Entrar com Google
@@ -64,48 +65,45 @@
         </div>
     </div>
 </div>
-
-<!-- Loading durante verificação -->
-<div id="auth-loading" class="auth-loading">
-    <div class="loading-content">
-        <div class="spinner"></div>
-        <p>Verificando autenticação...</p>
-        <small>Aguarde um momento</small>
-    </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Verificar status de autenticação para mostrar/ocultar seções
-function updateUISections() {
-    if (window.authManager) {
-        if (window.authManager.isAuthenticated) {
-            document.getElementById('game-section').style.display = 'block';
-            document.getElementById('welcome-section').style.display = 'none';
-        } else {
-            document.getElementById('game-section').style.display = 'none';
-            document.getElementById('welcome-section').style.display = 'block';
-        }
+// Sistema de atualização de UI para a página inicial
+function updatePageSections() {
+    const gameSection = document.getElementById('game-section');
+    const welcomeSection = document.getElementById('welcome-section');
+    
+    if (window.authManager && window.authManager.isAuthenticated) {
+        if (gameSection) gameSection.style.display = 'block';
+        if (welcomeSection) welcomeSection.style.display = 'none';
+    } else {
+        if (gameSection) gameSection.style.display = 'none';
+        if (welcomeSection) welcomeSection.style.display = 'block';
     }
 }
 
-// Atualizar UI quando o auth manager estiver pronto
+// Observar mudanças no estado de autenticação
 document.addEventListener('DOMContentLoaded', function() {
-    const checkAuthManager = setInterval(() => {
-        if (window.authManager && window.authManager.authChecked) {
-            updateUISections();
-            clearInterval(checkAuthManager);
+    // Verificar periodicamente até o authManager estar pronto
+    const checkAuthReady = setInterval(() => {
+        if (window.authManager) {
+            clearInterval(checkAuthReady);
+            
+            // Sobrescrever a função updateUI para incluir nossa lógica
+            const originalUpdateUI = window.authManager.updateUI;
+            window.authManager.updateUI = function(user) {
+                if (originalUpdateUI) {
+                    originalUpdateUI.call(this, user);
+                }
+                updatePageSections();
+            };
+            
+            // Atualizar inicialmente
+            updatePageSections();
         }
     }, 100);
 });
-
-// Observar mudanças no estado de autenticação
-if (window.authManager) {
-    window.authManager.updateUI = function(user) {
-        updateUISections();
-    };
-}
 </script>
 
 <style>
@@ -163,10 +161,16 @@ if (window.authManager) {
     background: #4285f4;
     color: white;
     border: none;
+    padding: 1rem 2rem;
+    font-size: 1.1rem;
+    border-radius: 25px;
+    cursor: pointer;
+    transition: all 0.3s ease;
 }
 
 .btn-google:hover {
     background: #3367d6;
+    transform: translateY(-2px);
 }
 
 .btn-large {
@@ -196,39 +200,6 @@ if (window.authManager) {
 .welcome-back {
     text-align: center;
     padding: 3rem;
-}
-
-.auth-loading {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.8);
-    color: white;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-}
-
-.loading-content {
-    text-align: center;
-}
-
-.spinner {
-    border: 4px solid rgba(255,255,255,0.3);
-    border-radius: 50%;
-    border-top: 4px solid white;
-    width: 40px;
-    height: 40px;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 1rem;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
 }
 </style>
 {% endblock %}

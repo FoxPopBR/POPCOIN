@@ -26,10 +26,7 @@ class AuthManager {
                     e.stopPropagation();
                     this.loginWithGoogle();
                 });
-                
-                // Estilo visual para debug
-                loginButton.style.border = '2px solid #00ff00';
-                loginButton.style.backgroundColor = '#4CAF50';
+
             } else {
                 console.error('❌ Botão de login NÃO encontrado via ID!');
                 

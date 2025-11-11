@@ -28,19 +28,33 @@ class PopCoinGame {
     async init() {
         console.log("🎮 Inicializando jogo...");
         
-        // Verificar autenticação antes de carregar o jogo
-        if (window.authManager) {
+        // CORREÇÃO: Verificação de autenticação mais robusta
+        if (!window.authManager) {
+            console.log("⏳ Aguardando AuthManager...");
             let waitCount = 0;
-            while (!window.authManager.authChecked && waitCount < 50) {
+            while (!window.authManager && waitCount < 50) {
                 await new Promise(resolve => setTimeout(resolve, 100));
                 waitCount++;
             }
             
-            if (!window.authManager.isAuthenticated) {
-                console.log("❌ Usuário não autenticado, redirecionando...");
+            if (!window.authManager) {
+                console.error("❌ AuthManager não carregado");
                 window.location.href = '/';
                 return;
             }
+        }
+        
+        // Aguardar verificação de autenticação
+        let waitCount = 0;
+        while (!window.authManager.authChecked && waitCount < 50) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            waitCount++;
+        }
+        
+        if (!window.authManager.isAuthenticated) {
+            console.log("❌ Usuário não autenticado, redirecionando...");
+            window.location.href = '/';
+            return;
         }
 
         console.log("✅ Usuário autenticado, carregando jogo...");

@@ -15,6 +15,12 @@
             <div class="header-content">
                 <h1>🎮 PopCoin IDLE</h1>
                 <div id="auth-section">
+                    <!-- Loading durante verificação -->
+                    <div id="auth-loading" class="auth-loading" style="display: flex;">
+                        <div class="loading-spinner"></div>
+                        <span>Verificando login...</span>
+                    </div>
+                    
                     <!-- Usuário logado -->
                     <div id="user-info" style="display: none;">
                         <img id="user-pic" src="" alt="Foto" class="user-avatar">
@@ -23,7 +29,7 @@
                     </div>
                     
                     <!-- Login -->
-                    <div id="login-section">
+                    <div id="login-section" style="display: none;">
                         <button id="loginButton" class="btn-login">
                             🔑 Entrar com Google
                         </button>
@@ -56,7 +62,8 @@
         firebase.initializeApp(firebaseConfig);
     </script>
     
-    <script src="{{ url_for('static', filename='js/auth-simple.js') }}"></script>
+    <!-- CORREÇÃO: Alterado para auth.js -->
+    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
     {% block scripts %}{% endblock %}
 
     <style>
@@ -109,6 +116,27 @@
             padding: 1rem;
             background: #f8f9fa;
             color: #666;
+        }
+
+        .auth-loading {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: white;
+        }
+
+        .loading-spinner {
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 2px solid white;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </body>
