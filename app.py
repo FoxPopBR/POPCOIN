@@ -114,7 +114,7 @@ def auth_login():
         if user_info:
             # Configurar sessão
             session['user'] = user_info
-            session['user_id'] = user_info['user_id']
+            session['user_id'] = user_info['uid']
             session.modified = True
             
             print(f"✅ Login bem-sucedido: {user_info['user_id']}")
@@ -149,7 +149,7 @@ def game_state():
     if not user_info:
         return jsonify({'error': 'Não autenticado'}), 401
 
-    user_id = user_info['user_id']
+    user_id = user_info['uid']
 
     if not game_manager:
         # Retornar estado padrão se game_manager não estiver disponível
