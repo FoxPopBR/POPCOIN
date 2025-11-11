@@ -1,32 +1,65 @@
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import urllib.parse
 
 def get_db_connection():
-    """Obtém conexão com o PostgreSQL do Render"""
+    """Obtém conexão com o PostgreSQL do Render - COM SSL FORÇADO"""
     database_url = os.environ.get('DATABASE_URL')
     
-    if database_url and database_url.startswith('postgres://'):
-        # Render usa PostgreSQL
-        try:
-            # Converter para formato psycopg2
-            if database_url.startswith('postgres://'):
-                database_url = database_url.replace('postgres://', 'postgresql://')
-            
-            conn = psycopg2.connect(database_url, sslmode='require')
-            return conn
-        except Exception as e:
-            print(f"❌ PostgreSQL connection failed: {e}")
-            return None
+    print(f"🔍 DATABASE_URL presente: {bool(database_url)}")
     
-    print("❌ DATABASE_URL não encontrada ou inválida")
-    return None
+    if not database_url:
+        print("❌ DATABASE_URL não encontrada nas variáveis de ambiente")
+        return None
+    
+    try:
+        # Parse da URL para debugging seguro
+        parsed_url = urllib.parse.urlparse(database_url)
+        safe_url = f"{parsed_url.scheme}://{parsed_url.hostname}:{parsed_url.port}{parsed_url.path}"
+        print(f"🔗 Conectando à: {safe_url}")
+        
+        # Converter URL se necessário
+        if database_url.startswith('postgres://'):
+            database_url = database_url.replace('postgres://', 'postgresql://')
+            print("🔄 URL convertida de postgres:// para postgresql://")
+        
+        # Opções de conexão para SSL
+        connect_args = {
+            'dsn': database_url,
+            'sslmode': 'require'
+        }
+        
+        print("🔐 Tentando conexão com SSL...")
+        conn = psycopg2.connect(**connect_args)
+        
+        # Testar a conexão
+        cur = conn.cursor()
+        cur.execute("SELECT 1 as test;")
+        result = cur.fetchone()
+        cur.close()
+        
+        if result and result[0] == 1:
+            print("✅ Conexão PostgreSQL testada e validada!")
+            return conn
+        else:
+            print("❌ Teste de conexão falhou")
+            conn.close()
+            return None
+            
+    except psycopg2.OperationalError as e:
+        print(f"❌ Erro operacional PostgreSQL: {e}")
+        return None
+    except Exception as e:
+        print(f"❌ Erro inesperado: {type(e).__name__}: {e}")
+        return None
 
 def init_db():
     """Inicializa o banco de dados"""
+    print("🔄 Iniciando inicialização do banco...")
     conn = get_db_connection()
     if not conn:
-        print("❌ No database connection available")
+        print("❌ Falha na conexão durante init_db")
         return
     
     cur = conn.cursor()
@@ -43,13 +76,16 @@ def init_db():
         ''')
         
         conn.commit()
-        print("✅ PostgreSQL Database initialized successfully")
+        print("✅ Tabela user_game_states criada/verificada com sucesso!")
+        
     except Exception as e:
-        print(f"❌ Database initialization error: {e}")
+        print(f"❌ Erro na criação da tabela: {e}")
         conn.rollback()
     finally:
         cur.close()
         conn.close()
+        print("🔒 Conexão fechada após init_db")
 
 # Inicializar o banco de dados quando o módulo for carregado
+print("📦 Carregando db_models.py...")
 init_db()

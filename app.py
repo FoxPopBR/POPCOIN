@@ -273,3 +273,61 @@ def debug_database():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG', False))
+
+@app.route('/debug/database/detailed')
+def debug_database_detailed():
+    """Teste detalhado de conexão com o banco"""
+    try:
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        
+        database_url = os.environ.get('DATABASE_URL')
+        
+        if not database_url:
+            return jsonify({
+                "status": "error",
+                "message": "DATABASE_URL não encontrada",
+                "environment_keys": list(os.environ.keys())
+            })
+        
+        # Testar conexão
+        if database_url.startswith('postgres://'):
+            database_url = database_url.replace('postgres://', 'postgresql://')
+        
+        conn = psycopg2.connect(database_url, sslmode='require')
+        cur = conn.cursor()
+        
+        # Teste 1: Versão do PostgreSQL
+        cur.execute("SELECT version();")
+        version = cur.fetchone()[0]
+        
+        # Teste 2: Listar tabelas
+        cur.execute("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public'
+        """)
+        tables = [row[0] for row in cur.fetchall()]
+        
+        # Teste 3: Contar registros na user_game_states
+        cur.execute("SELECT COUNT(*) as count FROM user_game_states;")
+        count_result = cur.fetchone()[0]
+        
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            "status": "success",
+            "database_version": version,
+            "tables": tables,
+            "user_game_states_count": count_result,
+            "message": "✅ Conexão bem-sucedida com PostgreSQL"
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"❌ Erro na conexão: {str(e)}",
+            "error_type": type(e).__name__,
+            "database_url_preview": os.environ.get('DATABASE_URL', '')[:50] + "..." if os.environ.get('DATABASE_URL') else None
+        })
