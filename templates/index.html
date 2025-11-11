@@ -1,40 +1,234 @@
 {% extends "base.html" %}
 
+{% block title %}PopCoin IDLE - Início{% endblock %}
+
 {% block content %}
 <div class="container">
-    <h2>Bem-vindo ao PopCoin IDLE!</h2>
-    <p>Um jogo idle onde você coleta moedas e faz upgrades.</p>
-    
-    <div id="game-section" style="display: none;">
-        <h3>Jogo Carregado!</h3>
-        <p>Você está logado. <a href="{{ url_for('game') }}">Ir para o jogo</a></p>
+    <div class="hero-section">
+        <h1>🎮 PopCoin IDLE</h1>
+        <p class="subtitle">Clique, colete moedas e evolua seu império!</p>
+        
+        <div class="features">
+            <div class="feature">
+                <span class="feature-icon">🪙</span>
+                <h3>Colete Moedas</h3>
+                <p>Clique na moeda para ganhar PopCoins</p>
+            </div>
+            
+            <div class="feature">
+                <span class="feature-icon">⚡</span>
+                <h3>Faça Upgrades</h3>
+                <p>Melhore seu clique e gere moedas automáticas</p>
+            </div>
+            
+            <div class="feature">
+                <span class="feature-icon">🏆</span>
+                <h3>Desbloqueie Conquistas</h3>
+                <p>Complete desafios e mostre seu progresso</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-section" class="game-section" style="display: none;">
+        <div class="welcome-back">
+            <h2>🎉 Bem-vindo de volta!</h2>
+            <p>Seu jogo está pronto para continuar.</p>
+            <a href="{{ url_for('game') }}" class="btn btn-primary btn-large">
+                🎮 Continuar Jogando
+            </a>
+        </div>
     </div>
     
-    <div id="welcome-section">
-        <p>Faça login com Google para começar a jogar!</p>
+    <div id="welcome-section" class="welcome-section">
+        <div class="auth-card">
+            <h2>🚀 Comece a Jogar</h2>
+            <p>Faça login com sua conta Google para salvar seu progresso e competir com amigos!</p>
+            
+            <div class="auth-actions">
+                <button id="loginButton" class="btn btn-google">
+                    <span class="btn-icon">🔐</span>
+                    Entrar com Google
+                </button>
+            </div>
+            
+            <div class="game-preview">
+                <h4>📊 O que esperar:</h4>
+                <ul>
+                    <li>✅ Progresso salvo automaticamente</li>
+                    <li>✅ Ganhos mesmo offline</li>
+                    <li>✅ Sistema de conquistas</li>
+                    <li>✅ Upgrades e evolução</li>
+                    <li>✅ Multiplicadores de prestígio</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading durante verificação -->
+<div id="auth-loading" class="auth-loading">
+    <div class="loading-content">
+        <div class="spinner"></div>
+        <p>Verificando autenticação...</p>
+        <small>Aguarde um momento</small>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    // Verificar status de autenticação ao carregar a página
-    document.addEventListener('DOMContentLoaded', function() {
-        checkAuthState();
-    });
-    
-    function checkAuthState() {
-        fetch('/api/auth/status')
-            .then(response => response.json())
-            .then(data => {
-                if (data.authenticated) {
-                    document.getElementById('game-section').style.display = 'block';
-                    document.getElementById('welcome-section').style.display = 'none';
-                } else {
-                    document.getElementById('game-section').style.display = 'none';
-                    document.getElementById('welcome-section').style.display = 'block';
-                }
-            });
+// Verificar status de autenticação para mostrar/ocultar seções
+function updateUISections() {
+    if (window.authManager) {
+        if (window.authManager.isAuthenticated) {
+            document.getElementById('game-section').style.display = 'block';
+            document.getElementById('welcome-section').style.display = 'none';
+        } else {
+            document.getElementById('game-section').style.display = 'none';
+            document.getElementById('welcome-section').style.display = 'block';
+        }
     }
+}
+
+// Atualizar UI quando o auth manager estiver pronto
+document.addEventListener('DOMContentLoaded', function() {
+    const checkAuthManager = setInterval(() => {
+        if (window.authManager && window.authManager.authChecked) {
+            updateUISections();
+            clearInterval(checkAuthManager);
+        }
+    }, 100);
+});
+
+// Observar mudanças no estado de autenticação
+if (window.authManager) {
+    window.authManager.updateUI = function(user) {
+        updateUISections();
+    };
+}
 </script>
+
+<style>
+.hero-section {
+    text-align: center;
+    padding: 2rem 0;
+}
+
+.hero-section h1 {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+    font-size: 1.2rem;
+    color: #666;
+    margin-bottom: 2rem;
+}
+
+.features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 2rem;
+    margin: 3rem 0;
+}
+
+.feature {
+    text-align: center;
+    padding: 1.5rem;
+    border-radius: 10px;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+}
+
+.feature-icon {
+    font-size: 2.5rem;
+    display: block;
+    margin-bottom: 1rem;
+}
+
+.auth-card {
+    max-width: 400px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.btn-google {
+    background: #4285f4;
+    color: white;
+    border: none;
+}
+
+.btn-google:hover {
+    background: #3367d6;
+}
+
+.btn-large {
+    padding: 1rem 2rem;
+    font-size: 1.1rem;
+}
+
+.btn-icon {
+    margin-right: 0.5rem;
+}
+
+.game-preview {
+    margin-top: 2rem;
+    text-align: left;
+}
+
+.game-preview ul {
+    list-style: none;
+    padding: 0;
+}
+
+.game-preview li {
+    padding: 0.3rem 0;
+    color: #28a745;
+}
+
+.welcome-back {
+    text-align: center;
+    padding: 3rem;
+}
+
+.auth-loading {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.loading-content {
+    text-align: center;
+}
+
+.spinner {
+    border: 4px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top: 4px solid white;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
 {% endblock %}

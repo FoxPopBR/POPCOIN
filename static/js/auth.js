@@ -1,120 +1,33 @@
-// Gerenciamento de autenticação
+// Gerenciamento de autenticação - VERSÃO COMPLETA
 class AuthManager {
     constructor() {
         this.user = null;
+        this.isAuthenticated = false;
         this.authChecked = false;
+        this.redirecting = false;
         this.initFirebase();
-        this.setupAuthListeners();
+        this.checkPersistentAuth();
     }
 
     initFirebase() {
-        console.log('Firebase configurado');
-    }
-
-    setupAuthListeners() {
-        // Observar mudanças no estado de autenticação do Firebase
+        // Configuração do Firebase será injetada pelo template
+        console.log('🔥 Firebase inicializado');
+        
+        // Configurar observador de estado de autenticação
         firebase.auth().onAuthStateChanged(async (user) => {
-            console.log('Firebase auth state changed:', user);
+            console.log('🔥 Estado de autenticação alterado:', user ? user.email : 'null');
             
             if (user) {
                 await this.handleUserLogin(user);
             } else {
                 this.handleUserLogout();
             }
-            
-            this.authChecked = true;
         });
     }
 
-    async handleUserLogin(user) {
-        console.log('Processando login do usuário:', user.email);
-        this.user = user;
-        
-        try {
-            // Obter token do Firebase
-            const token = await user.getIdToken();
-            
-            // Enviar token para o servidor
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ token: token })
-            });
-
-            const result = await response.json();
-            
-            if (result.success) {
-                this.updateUI(user);
-                // Salvar estado de login no localStorage para persistência
-                localStorage.setItem('firebase_uid', user.uid);
-                localStorage.setItem('last_login', new Date().toISOString());
-                console.log('✅ Login sincronizado com servidor');
-                
-                // Redirecionar apenas se estiver na página inicial
-                if (window.location.pathname === '/') {
-                    console.log('Redirecionando para /game');
-                    setTimeout(() => {
-                        window.location.href = '/game';
-                    }, 1000);
-                }
-            } else {
-                console.error('❌ Erro no servidor:', result.error);
-                // Se o servidor rejeitou, fazer logout no Firebase também
-                await this.logout();
-            }
-        } catch (error) {
-            console.error('❌ Erro ao comunicar com servidor:', error);
-            this.handleUserLogout();
-        }
-    }
-
-    handleUserLogout() {
-        console.log('Processando logout');
-        this.user = null;
-        this.updateUI(null);
-        // Limpar dados de persistência
-        localStorage.removeItem('firebase_uid');
-        localStorage.removeItem('last_login');
-        
-        // Se estiver na página do jogo, redirecionar para início
-        if (window.location.pathname === '/game') {
-            console.log('Redirecionando para /');
-            setTimeout(() => {
-                window.location.href = '/';
-            }, 500);
-        }
-    }
-
-    updateUI(user) {
-        const userInfo = document.getElementById('user-info');
-        const loginSection = document.getElementById('login-section');
-        const userPic = document.getElementById('user-pic');
-        const userName = document.getElementById('user-name');
-
-        if (user) {
-            // Usuário logado
-            if (user.photoURL) {
-                userPic.src = user.photoURL;
-                userPic.style.display = 'inline';
-            } else {
-                userPic.style.display = 'none';
-            }
-            userName.textContent = user.displayName || user.email || 'Usuário';
-            userInfo.style.display = 'flex';
-            loginSection.style.display = 'none';
-        } else {
-            // Usuário não logado
-            userInfo.style.display = 'none';
-            loginSection.style.display = 'block';
-        }
-    }
-
-    // Login com Google
     async loginWithGoogle() {
         try {
-            console.log('Iniciando login com Google...');
+            console.log('🔐 Iniciando login com Google...');
             
             const provider = new firebase.auth.GoogleAuthProvider();
             provider.addScope('profile');
@@ -149,145 +62,224 @@ class AuthManager {
                     errorMessage += error.message;
             }
             
-            alert(errorMessage);
+            this.showMessage(errorMessage, 'error');
             throw error;
         }
     }
 
-    // Logout
+    async handleUserLogin(user) {
+        console.log('👤 Processando login do usuário:', user.email);
+        this.user = user;
+        
+        try {
+            // Obter token do Firebase
+            const token = await user.getIdToken();
+            
+            // Enviar token para o servidor
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ token: token })
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                this.isAuthenticated = true;
+                this.updateUI(user);
+                
+                // Salvar no localStorage para persistência
+                localStorage.setItem('popcoin_user', JSON.stringify(result.user));
+                localStorage.setItem('popcoin_last_login', new Date().toISOString());
+                
+                console.log('✅ Login sincronizado com servidor');
+                await this.syncWithBackend();
+            } else {
+                console.error('❌ Erro no servidor:', result.error);
+                await this.logout();
+            }
+        } catch (error) {
+            console.error('❌ Erro ao comunicar com servidor:', error);
+            this.handleUserLogout();
+        }
+    }
+
+    handleUserLogout() {
+        console.log('👋 Processando logout');
+        this.user = null;
+        this.isAuthenticated = false;
+        this.updateUI(null);
+        
+        // Limpar dados de persistência
+        localStorage.removeItem('popcoin_user');
+        localStorage.removeItem('popcoin_last_login');
+    }
+
     async logout() {
         try {
-            console.log('Iniciando logout...');
+            console.log('🚪 Iniciando logout...');
             
             // Fazer logout no Firebase primeiro
             await firebase.auth().signOut();
             
             // Fazer logout no servidor
-            await fetch('/api/auth/logout');
+            await fetch('/api/auth/logout', { method: 'POST' });
             
             this.handleUserLogout();
+            await this.syncWithBackend();
             console.log('✅ Logout completo realizado');
         } catch (error) {
             console.error('❌ Erro no logout:', error);
             // Mesmo com erro, tentar limpar o estado local
             this.handleUserLogout();
+            await this.syncWithBackend();
         }
     }
 
-    // Verificar status de autenticação
-    async checkAuthStatus() {
+    async syncWithBackend() {
         try {
+            console.log("🔄 Sincronizando com backend...");
             const response = await fetch('/api/auth/status');
             const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error('❌ Erro ao verificar status:', error);
-            return { authenticated: false, user: null };
-        }
-    }
-
-    // Verificar login persistente
-    checkPersistentAuth() {
-        const savedUID = localStorage.getItem('firebase_uid');
-        const lastLogin = localStorage.getItem('last_login');
-        
-        if (savedUID && lastLogin) {
-            const loginTime = new Date(lastLogin);
-            const now = new Date();
-            const hoursDiff = (now - loginTime) / (1000 * 60 * 60);
             
-            // Se fez login nas últimas 24 horas, considerar como "lembrado"
-            if (hoursDiff < 24) {
-                return true;
+            console.log("📡 Status da autenticação:", data.authenticated);
+            console.log("📍 Página atual:", window.location.pathname);
+
+            if (data.authenticated) {
+                this.isAuthenticated = true;
+                // Só redireciona se estiver na página inicial E não estiver já redirecionando
+                if (window.location.pathname === '/' && !this.redirecting) {
+                    console.log("➡️ Redirecionando para /game");
+                    this.redirecting = true;
+                    setTimeout(() => {
+                        window.location.href = '/game';
+                    }, 1000);
+                }
+            } else {
+                this.isAuthenticated = false;
+                // Só redireciona se estiver na página do jogo E não estiver já redirecionando
+                if (window.location.pathname === '/game' && !this.redirecting) {
+                    console.log("⬅️ Redirecionando para /");
+                    this.redirecting = true;
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                }
             }
+        } catch (error) {
+            console.error('❌ Erro na sincronização:', error);
+        } finally {
+            this.authChecked = true;
+            // Reset da flag de redirecionamento após um tempo
+            setTimeout(() => {
+                this.redirecting = false;
+            }, 2000);
         }
-        
-        return false;
     }
 
-    // Verificar se há usuário salvo e tentar recuperar sessão
-    async tryRestoreSession() {
-        if (this.checkPersistentAuth()) {
-            console.log('Tentando restaurar sessão persistente...');
-            // Aguardar o Firebase verificar se ainda está autenticado
-            // O listener onAuthStateChanged irá tratar o resto
+    updateUI(user) {
+        const userInfo = document.getElementById('user-info');
+        const loginSection = document.getElementById('login-section');
+        const userPic = document.getElementById('user-pic');
+        const userName = document.getElementById('user-name');
+
+        if (user) {
+            // Usuário logado
+            if (user.photoURL) {
+                userPic.src = user.photoURL;
+                userPic.style.display = 'inline';
+            } else {
+                userPic.style.display = 'none';
+            }
+            userName.textContent = user.displayName || user.email || 'Usuário';
+            if (userInfo) userInfo.style.display = 'flex';
+            if (loginSection) loginSection.style.display = 'none';
+        } else {
+            // Usuário não logado
+            if (userInfo) userInfo.style.display = 'none';
+            if (loginSection) loginSection.style.display = 'block';
         }
+    }
+
+    async checkPersistentAuth() {
+        try {
+            const savedUser = localStorage.getItem('popcoin_user');
+            if (savedUser) {
+                console.log("📱 Usuário encontrado no localStorage");
+                this.user = JSON.parse(savedUser);
+                this.isAuthenticated = true;
+                await this.syncWithBackend();
+            } else {
+                console.log("📱 Nenhum usuário no localStorage");
+                await this.syncWithBackend();
+            }
+        } catch (error) {
+            console.error('❌ Erro na verificação persistente:', error);
+            this.authChecked = true;
+        }
+    }
+
+    showMessage(message, type = 'info') {
+        // Implementação simples de sistema de mensagens
+        console.log(`${type.toUpperCase()}: ${message}`);
+        alert(message); // Temporário - pode ser substituído por um sistema mais sofisticado
     }
 }
 
-// Instância global do gerenciador de autenticação
-const authManager = new AuthManager();
+// Inicialização global
+let authManager;
 
-// Funções globais para os botões HTML
-window.loginWithGoogle = () => {
-    console.log('Botão login clicado');
-    authManager.loginWithGoogle();
-};
-
-window.logout = () => {
-    console.log('Botão logout clicado');
-    if (confirm('Tem certeza que deseja sair?')) {
-        authManager.logout();
-    }
-};
-
-// Verificação inicial de autenticação
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('Página carregada, aguardando verificação de autenticação...');
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Inicializando sistema de autenticação...');
     
-    // Mostrar loading se o elemento existir
+    // Mostrar loading
     const loadingElement = document.getElementById('auth-loading');
     if (loadingElement) {
         loadingElement.style.display = 'flex';
     }
     
-    // Aguardar a verificação inicial do Firebase
-    const waitForAuthCheck = () => {
-        return new Promise((resolve) => {
-            const check = () => {
-                if (authManager.authChecked) {
-                    resolve();
-                } else {
-                    setTimeout(check, 100);
+    // Aguardar um pouco para garantir que o Firebase está carregado
+    setTimeout(() => {
+        authManager = new AuthManager();
+        window.authManager = authManager;
+
+        // Configurar event listeners
+        const loginButton = document.getElementById('loginButton');
+        const logoutButton = document.getElementById('logoutButton');
+
+        if (loginButton) {
+            loginButton.addEventListener('click', () => authManager.loginWithGoogle());
+        }
+
+        if (logoutButton) {
+            logoutButton.addEventListener('click', () => {
+                if (confirm('Tem certeza que deseja sair?')) {
+                    authManager.logout();
                 }
-            };
-            check();
-        });
-    };
-    
-    await waitForAuthCheck();
-    
-    // Agora verificar o status com o servidor
-    const authStatus = await authManager.checkAuthStatus();
-    console.log('Status final de autenticação:', authStatus);
-    
-    // Lógica de redirecionamento mais conservadora
-    if (authStatus.authenticated && window.location.pathname === '/') {
-        console.log('Usuário autenticado na página inicial, redirecionando para /game...');
+            });
+        }
+        
+        // Esconder loading após verificação
         setTimeout(() => {
-            window.location.href = '/game';
-        }, 1000);
-    } else if (!authStatus.authenticated && window.location.pathname === '/game') {
-        console.log('Usuário não autenticado na página do jogo, redirecionando para /...');
-        setTimeout(() => {
-            window.location.href = '/';
-        }, 1000);
-    }
-    
-    // Esconder loading
-    if (loadingElement) {
-        loadingElement.style.display = 'none';
-    }
-    
-    // Tentar restaurar sessão se houver dados persistentes
-    authManager.tryRestoreSession();
+            if (loadingElement) {
+                loadingElement.style.display = 'none';
+            }
+        }, 2000);
+        
+    }, 100);
 });
 
-// Salvar estado antes de sair
-window.addEventListener('beforeunload', () => {
-    if (authManager.user) {
-        console.log('Salvando estado de autenticação antes de sair...');
-        localStorage.setItem('firebase_uid', authManager.user.uid);
-        localStorage.setItem('last_login', new Date().toISOString());
+// Funções globais para compatibilidade
+window.loginWithGoogle = () => {
+    if (window.authManager) {
+        window.authManager.loginWithGoogle();
     }
-});
+};
+
+window.logout = () => {
+    if (window.authManager && confirm('Tem certeza que deseja sair?')) {
+        window.authManager.logout();
+    }
+};

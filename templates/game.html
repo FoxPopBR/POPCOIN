@@ -1,51 +1,71 @@
 {% extends "base.html" %}
 
-{% block title %}Jogar - PopCoin IDLE{% endblock %}
+{% block title %}Jogando - PopCoin IDLE{% endblock %}
 
 {% block content %}
 <div class="game-container">
+    <!-- Header do Jogo -->
     <div class="game-header">
-        <h2>PopCoin IDLE Game</h2>
+        <div class="game-title">
+            <h1>🎮 PopCoin IDLE</h1>
+            <div class="user-info" id="user-info">
+                <img id="user-pic" src="" alt="Foto" class="user-avatar">
+                <span id="user-name" class="user-name"></span>
+                <button onclick="logout()" class="btn btn-logout">🚪 Sair</button>
+            </div>
+        </div>
+        
         <div class="game-stats">
-            <div class="stat">
-                <span class="stat-value" id="coins-count">0</span>
-                <span class="stat-label">PopCoins</span>
+            <div class="stat-card">
+                <div class="stat-value" id="coins-count">0</div>
+                <div class="stat-label">🪙 PopCoins</div>
             </div>
-            <div class="stat">
-                <span class="stat-value" id="coins-per-click">1</span>
-                <span class="stat-label">Por Clique</span>
+            <div class="stat-card">
+                <div class="stat-value" id="coins-per-click">1</div>
+                <div class="stat-label">⚡ Por Clique</div>
             </div>
-            <div class="stat">
-                <span class="stat-value" id="coins-per-second">0</span>
-                <span class="stat-label">Por Segundo</span>
+            <div class="stat-card">
+                <div class="stat-value" id="coins-per-second">0</div>
+                <div class="stat-label">🔄 Por Segundo</div>
             </div>
-            <div class="stat">
-                <span class="stat-value" id="prestige-level">0</span>
-                <span class="stat-label">Prestígio</span>
+            <div class="stat-card">
+                <div class="stat-value" id="prestige-level">0</div>
+                <div class="stat-label">⭐ Prestígio</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-clicks">0</div>
+                <div class="stat-label">👆 Total Cliques</div>
             </div>
         </div>
     </div>
 
+    <!-- Área Principal do Jogo -->
     <div class="game-main">
+        <!-- Área de Clique -->
         <div class="click-area">
             <button id="click-button" class="coin-button">
-                <div class="coin-animation" id="coin-animation">🪙</div>
+                <div class="coin-animation" id="coin-animation">
+                    <div class="coin">🪙</div>
+                    <div class="coin-shine"></div>
+                </div>
                 <span class="click-text">CLIQUE PARA GANHAR!</span>
             </button>
             <div class="click-bonus" id="click-bonus">+1</div>
         </div>
 
+        <!-- Painéis Laterais -->
         <div class="game-panels">
+            <!-- Painel de Upgrades -->
             <div class="panel upgrades-panel">
-                <h3>🏗️ Upgrades</h3>
+                <h3>🏗️ Sistema de Upgrades</h3>
                 <div class="upgrade-list">
                     <div class="upgrade-item" data-upgrade="click_power">
                         <div class="upgrade-info">
-                            <h4>Força do Clique</h4>
-                            <p>Aumenta moedas por clique</p>
+                            <h4>💪 Força do Clique</h4>
+                            <p>Aumenta moedas ganhas por clique</p>
                             <div class="upgrade-stats">
-                                <span>Nível: <span id="click-power-level">1</span></span>
-                                <span>+<span id="click-power-bonus">1</span> por clique</span>
+                                <span>Nível: <strong id="click-power-level">1</strong></span>
+                                <span>Bônus: +<strong id="click-power-bonus">1</strong> por clique</span>
                             </div>
                         </div>
                         <button class="buy-button" data-cost="10">
@@ -55,11 +75,11 @@
 
                     <div class="upgrade-item" data-upgrade="auto_clicker">
                         <div class="upgrade-info">
-                            <h4>Clique Automático</h4>
-                            <p>Gera moedas automaticamente</p>
+                            <h4>🤖 Clique Automático</h4>
+                            <p>Gera moedas automaticamente a cada segundo</p>
                             <div class="upgrade-stats">
-                                <span>Quantidade: <span id="auto-clicker-count">0</span></span>
-                                <span>+<span id="auto-clicker-bonus">0</span>/s</span>
+                                <span>Quantidade: <strong id="auto-clicker-count">0</strong></span>
+                                <span>Produção: +<strong id="auto-clicker-bonus">0</strong>/s</span>
                             </div>
                         </div>
                         <button class="buy-button" data-cost="50">
@@ -69,11 +89,11 @@
 
                     <div class="upgrade-item" data-upgrade="click_bot">
                         <div class="upgrade-info">
-                            <h4>Bot de Clique</h4>
-                            <p>Robôs que clicam por você</p>
+                            <h4>🏭 Bot de Clique</h4>
+                            <p>Robôs avançados que geram mais moedas</p>
                             <div class="upgrade-stats">
-                                <span>Quantidade: <span id="click-bot-count">0</span></span>
-                                <span>+<span id="click-bot-bonus">0</span>/s</span>
+                                <span>Quantidade: <strong id="click-bot-count">0</strong></span>
+                                <span>Produção: +<strong id="click-bot-bonus">0</strong>/s</span>
                             </div>
                         </div>
                         <button class="buy-button" data-cost="500">
@@ -83,34 +103,420 @@
                 </div>
             </div>
 
+            <!-- Painel de Conquistas -->
             <div class="panel achievements-panel">
-                <h3>🏆 Conquistas</h3>
-                <div id="achievements-list">
-                    <div class="achievement locked">
-                        <span>💰 Primeiras Moedas</span>
-                        <span>Ganhe 100 moedas</span>
-                    </div>
-                    <div class="achievement locked">
-                        <span>⚡ Clique Rápido</span>
-                        <span>Faça 50 cliques</span>
-                    </div>
-                    <div class="achievement locked">
-                        <span>🏭 Industrial</span>
-                        <span>Tenha 10 upgrades</span>
-                    </div>
+                <h3>🏆 Sistema de Conquistas</h3>
+                <div id="achievements-list" class="achievements-list">
+                    <!-- As conquistas serão carregadas dinamicamente -->
                 </div>
             </div>
+
+            <!-- Painel de Prestígio -->
+            <div class="panel prestige-panel">
+                <h3>⭐ Sistema de Prestígio</h3>
+                <div class="prestige-info">
+                    <p>Ganhe um multiplicador permanente resetando seu progresso!</p>
+                    <div class="prestige-requirements">
+                        <strong>Requisito:</strong> 10,000 moedas totais
+                    </div>
+                    <button id="prestige-button" class="btn btn-prestige">
+                        Fazer Prestígio (0x)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status do Jogo -->
+    <div class="game-footer">
+        <div class="game-status">
+            <span id="save-status">✅ Jogo salvo automaticamente</span>
+            <span class="server-status">🟢 Servidor online</span>
         </div>
     </div>
 </div>
 
 <!-- Loading Overlay -->
 <div id="loading-overlay" class="loading-overlay">
-    <div class="loading-spinner"></div>
-    <p>Carregando jogo...</p>
+    <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <h3>Carregando PopCoin IDLE...</h3>
+        <p>Preparando sua aventura de coleta de moedas!</p>
+        <div class="loading-progress">
+            <div class="progress-bar">
+                <div class="progress-fill"></div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/game.js') }}"></script>
+
+<style>
+.game-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+.game-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 15px;
+    margin-bottom: 2rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.game-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.game-title h1 {
+    margin: 0;
+    font-size: 2rem;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid white;
+}
+
+.user-name {
+    font-weight: bold;
+}
+
+.btn-logout {
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white;
+}
+
+.btn-logout:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.game-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: rgba(255,255,255,0.1);
+    padding: 1rem;
+    border-radius: 10px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.game-main {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.click-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.coin-button {
+    background: linear-gradient(45deg, #ffd700, #ff6b00);
+    border: none;
+    border-radius: 50%;
+    width: 200px;
+    height: 200px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 15px 35px rgba(255, 215, 0, 0.4);
+}
+
+.coin-button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 20px 40px rgba(255, 215, 0, 0.6);
+}
+
+.coin-button:active {
+    transform: scale(0.95);
+}
+
+.coin-animation {
+    position: relative;
+    font-size: 4rem;
+    transition: transform 0.3s ease;
+}
+
+.coin-button:active .coin-animation {
+    transform: scale(0.9);
+}
+
+.click-text {
+    position: absolute;
+    bottom: -40px;
+    color: #666;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.click-bonus {
+    position: absolute;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #ffd700;
+    opacity: 0;
+    transition: all 1s ease;
+}
+
+.click-bonus.show {
+    opacity: 1;
+    transform: translateY(-50px);
+}
+
+.game-panels {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.panel {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    border: 1px solid #e9ecef;
+}
+
+.panel h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: #333;
+    border-bottom: 2px solid #f8f9fa;
+    padding-bottom: 0.5rem;
+}
+
+.upgrade-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.upgrade-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 10px;
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.upgrade-item:hover {
+    background: #e9ecef;
+    transform: translateX(5px);
+}
+
+.upgrade-info h4 {
+    margin: 0 0 0.5rem 0;
+    color: #333;
+}
+
+.upgrade-info p {
+    margin: 0 0 0.5rem 0;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.upgrade-stats {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.8rem;
+    color: #888;
+}
+
+.buy-button {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 25px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.buy-button:hover:not(:disabled) {
+    background: #218838;
+    transform: translateY(-2px);
+}
+
+.buy-button:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.achievements-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.achievement {
+    padding: 1rem;
+    border-radius: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.3s ease;
+}
+
+.achievement.unlocked {
+    background: linear-gradient(45deg, #fff3cd, #ffecb5);
+    border: 1px solid #ffeaa7;
+}
+
+.achievement.locked {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    color: #6c757d;
+}
+
+.prestige-info {
+    text-align: center;
+}
+
+.btn-prestige {
+    background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+    color: white;
+    border: none;
+    padding: 1rem 2rem;
+    border-radius: 25px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 1rem;
+    transition: all 0.3s ease;
+}
+
+.btn-prestige:hover {
+    transform: scale(1.05);
+    box-shadow: 0 10px 20px rgba(255, 107, 107, 0.3);
+}
+
+.game-footer {
+    text-align: center;
+    padding: 1rem;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.game-status {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+}
+
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.loading-content {
+    text-align: center;
+    max-width: 400px;
+}
+
+.loading-spinner {
+    border: 4px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top: 4px solid white;
+    width: 60px;
+    height: 60px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 2rem;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 4px;
+    margin-top: 1rem;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: white;
+    border-radius: 4px;
+    animation: progress 2s ease-in-out infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes progress {
+    0% { width: 0%; }
+    50% { width: 70%; }
+    100% { width: 100%; }
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .game-main {
+        grid-template-columns: 1fr;
+    }
+    
+    .game-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .upgrade-item {
+        flex-direction: column;
+        text-align: center;
+        gap: 1rem;
+    }
+}
+</style>
 {% endblock %}
