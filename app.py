@@ -92,6 +92,27 @@ def profile():
     
     return render_template('profile.html', firebase_config=FIREBASE_CONFIG)
 
+@app.route('/api/debug/database')
+def debug_database():
+    """Debug da conexão com banco de dados"""
+    try:
+        database_url = os.environ.get('DATABASE_URL', 'Não configurada')
+        
+        # Informações seguras (sem senha)
+        safe_url = "Não disponível"
+        if database_url and database_url != 'Não configurada':
+            parsed = urllib.parse.urlparse(database_url)
+            safe_url = f"{parsed.scheme}://{parsed.hostname}:{parsed.port}{parsed.path}"
+        
+        return jsonify({
+            'database_configured': bool(database_url and database_url != 'Não configurada'),
+            'database_url_safe': safe_url,
+            'db_manager_initialized': db_manager.initialized if db_manager else False,
+            'environment_keys': list(os.environ.keys())
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
 # ========== API DE AUTENTICAÇÃO ==========
 
 @app.route('/api/auth/status')
