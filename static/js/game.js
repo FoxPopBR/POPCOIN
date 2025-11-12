@@ -1,4 +1,4 @@
-// Gerenciamento principal do jogo - VERSÃO COMPLETA
+// static/js/game.js - VERSÃO CORRIGIDA E INTEGRADA
 class PopCoinGame {
     constructor() {
         this.gameState = {
@@ -21,6 +21,8 @@ class PopCoinGame {
         this.isLoading = true;
         this.autoSaveInterval = null;
         this.gameLoopInterval = null;
+        this.lastSaveTime = 0;
+        this.saveCooldown = 5000; // 5 segundos entre saves
         
         this.init();
     }
@@ -28,7 +30,7 @@ class PopCoinGame {
     async init() {
         console.log("🎮 Inicializando jogo...");
         
-        // CORREÇÃO: Verificação de autenticação mais robusta
+        // Verificação de autenticação mais robusta
         if (!window.authManager) {
             console.log("⏳ Aguardando AuthManager...");
             let waitCount = 0;
@@ -39,7 +41,8 @@ class PopCoinGame {
             
             if (!window.authManager) {
                 console.error("❌ AuthManager não carregado");
-                window.location.href = '/';
+                this.showMessage("Erro de autenticação. Redirecionando...", "error");
+                setTimeout(() => window.location.href = '/', 2000);
                 return;
             }
         }
@@ -53,7 +56,8 @@ class PopCoinGame {
         
         if (!window.authManager.isAuthenticated) {
             console.log("❌ Usuário não autenticado, redirecionando...");
-            window.location.href = '/';
+            this.showMessage("Você precisa estar logado para jogar. Redirecionando...", "error");
+            setTimeout(() => window.location.href = '/', 2000);
             return;
         }
 
@@ -63,12 +67,27 @@ class PopCoinGame {
         this.startGameLoop();
         this.startAutoSave();
         this.hideLoading();
+        
+        // Adicionar link para perfil no header do jogo
+        this.addProfileLink();
     }
 
     async loadGameState() {
         try {
             console.log("📥 Carregando estado do jogo...");
+            
+            // Verificar autenticação antes de carregar
+            if (!window.authManager || !window.authManager.isAuthenticated) {
+                throw new Error("Usuário não autenticado");
+            }
+
             const response = await fetch('/api/game/state');
+            
+            if (response.status === 401) {
+                // Não autorizado - redirecionar para login
+                window.location.href = '/';
+                return;
+            }
             
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -78,6 +97,14 @@ class PopCoinGame {
             
             if (data.error) {
                 console.error('❌ Erro do servidor:', data.error);
+                this.showMessage('Erro ao carregar jogo: ' + data.error, 'error');
+                return;
+            }
+            
+            // Se o servidor retornar um estado vazio, usar o estado padrão
+            if (Object.keys(data).length === 0) {
+                console.log("📭 Nenhum estado salvo encontrado, usando estado padrão");
+                this.updateUI();
                 return;
             }
             
@@ -96,16 +123,30 @@ class PopCoinGame {
             
         } catch (error) {
             console.error('❌ Erro ao carregar jogo:', error);
-            this.showMessage('Erro ao carregar o jogo. Tentando novamente...', 'error');
             
-            // Tentar novamente após 3 segundos
-            setTimeout(() => this.loadGameState(), 3000);
+            if (error.message.includes("autenticado") || error.message.includes("autorizado")) {
+                this.showMessage('Sessão expirada. Redirecionando...', 'error');
+                setTimeout(() => window.location.href = '/', 2000);
+                return;
+            }
+            
+            this.showMessage('Erro ao carregar o jogo. Tentando continuar offline...', 'warning');
+            
+            // Tentar novamente após 5 segundos
+            setTimeout(() => this.loadGameState(), 5000);
         }
     }
 
-    async saveGameState() {
+    async saveGameState(force = false) {
+        // Prevenir saves muito frequentes
+        const now = Date.now();
+        if (!force && now - this.lastSaveTime < this.saveCooldown) {
+            return;
+        }
+        
         try {
             this.gameState.last_update = Date.now() / 1000;
+            this.lastSaveTime = now;
             
             const response = await fetch('/api/game/state', {
                 method: 'POST',
@@ -115,6 +156,12 @@ class PopCoinGame {
                 body: JSON.stringify(this.gameState)
             });
             
+            if (response.status === 401) {
+                // Sessão expirada
+                this.showMessage('Sessão expirada. Faça login novamente.', 'error');
+                return;
+            }
+            
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -123,11 +170,19 @@ class PopCoinGame {
             
             if (result.success) {
                 console.log('💾 Estado do jogo salvo');
+                this.updateSaveStatus('✅ Jogo salvo');
             } else {
                 console.error('❌ Erro ao salvar:', result.error);
+                this.showMessage('Erro ao salvar jogo: ' + result.error, 'error');
             }
         } catch (error) {
             console.error('❌ Erro ao salvar jogo:', error);
+            this.updateSaveStatus('❌ Erro ao salvar');
+            
+            // Não mostrar erro para o usuário a menos que seja crítico
+            if (!error.message.includes('Network')) {
+                this.showMessage('Erro ao salvar progresso. Verifique sua conexão.', 'warning');
+            }
         }
     }
 
@@ -135,15 +190,15 @@ class PopCoinGame {
         const now = Date.now() / 1000;
         const timeDiff = now - this.gameState.last_update;
         
-        if (timeDiff > 60 && this.gameState.coins_per_second > 0) { // Mais de 1 minuto offline
-            const offlineEarnings = timeDiff * this.gameState.coins_per_second;
+        if (timeDiff > 60 && this.gameState.coins_per_second > 0) {
+            const offlineEarnings = Math.min(timeDiff * this.gameState.coins_per_second, 3600 * this.gameState.coins_per_second); // Limite de 1 hora
             this.gameState.coins += offlineEarnings;
             this.gameState.total_coins += offlineEarnings;
             
             console.log(`💰 Ganhos offline: ${offlineEarnings.toFixed(1)} moedas (${timeDiff.toFixed(0)}s)`);
             
-            if (offlineEarnings > 0) {
-                this.showMessage(`💰 Ganhos offline: +${offlineEarnings.toFixed(0)} moedas!`, 'success');
+            if (offlineEarnings > 10) {
+                this.showMessage(`💰 Ganhos offline: +${Math.floor(offlineEarnings)} moedas!`, 'success');
             }
         }
     }
@@ -153,7 +208,15 @@ class PopCoinGame {
         const clickButton = document.getElementById('click-button');
         if (clickButton) {
             clickButton.addEventListener('click', () => this.handleClick());
-            clickButton.addEventListener('mousedown', (e) => e.preventDefault()); // Prevenir seleção de texto
+            clickButton.addEventListener('mousedown', (e) => e.preventDefault());
+            
+            // Efeitos de hover
+            clickButton.addEventListener('mouseenter', () => {
+                clickButton.style.transform = 'scale(1.05)';
+            });
+            clickButton.addEventListener('mouseleave', () => {
+                clickButton.style.transform = 'scale(1)';
+            });
         }
 
         // Botões de upgrade
@@ -168,7 +231,7 @@ class PopCoinGame {
             });
         });
 
-        // Botão de prestígio (se existir)
+        // Botão de prestígio
         const prestigeButton = document.getElementById('prestige-button');
         if (prestigeButton) {
             prestigeButton.addEventListener('click', () => this.prestige());
@@ -179,7 +242,28 @@ class PopCoinGame {
             this.destroy();
         });
 
+        // Salvar quando a página for ocultada (mudança de aba, etc)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                this.saveGameState(true);
+            }
+        });
+
         console.log("✅ Event listeners configurados");
+    }
+
+    addProfileLink() {
+        // Adicionar link para o perfil no header do jogo
+        const gameTitle = document.querySelector('.game-title');
+        if (gameTitle && !document.getElementById('profile-link')) {
+            const profileLink = document.createElement('a');
+            profileLink.id = 'profile-link';
+            profileLink.href = '/profile';
+            profileLink.className = 'btn btn-secondary';
+            profileLink.innerHTML = '👤 Meu Perfil';
+            profileLink.style.marginLeft = '10px';
+            gameTitle.appendChild(profileLink);
+        }
     }
 
     handleClick() {
@@ -199,8 +283,8 @@ class PopCoinGame {
         // Verificar conquistas
         this.checkAchievements();
         
-        // Salvar a cada 10 cliques
-        if (this.gameState.click_count % 10 === 0) {
+        // Salvar a cada 25 cliques (menos frequente para performance)
+        if (this.gameState.click_count % 25 === 0) {
             this.saveGameState();
         }
     }
@@ -214,7 +298,8 @@ class PopCoinGame {
         
         // Posição aleatória
         const randomX = (Math.random() * 100 - 50);
-        bonusElement.style.transform = `translateX(${randomX}px)`;
+        const randomY = -30 - (Math.random() * 20);
+        bonusElement.style.transform = `translate(${randomX}px, ${randomY}px)`;
         
         setTimeout(() => {
             bonusElement.classList.remove('show');
@@ -229,7 +314,7 @@ class PopCoinGame {
         
         setTimeout(() => {
             coin.classList.remove('animate');
-        }, 300);
+        }, 200);
     }
 
     async buyUpgrade(upgradeType, baseCost) {
@@ -243,28 +328,13 @@ class PopCoinGame {
             // Aplicar upgrade
             this.gameState.upgrades[upgradeType] = currentLevel + 1;
             
-            // CORREÇÃO: Sistema de CPS funcionando corretamente
-            switch (upgradeType) {
-                case 'click_power':
-                    this.gameState.coins_per_click = 1 + this.gameState.upgrades.click_power;
-                    break;
-                    
-                case 'auto_clicker':
-                    // CORREÇÃO: Cada auto_clicker adiciona 0.1 moedas/segundo
-                    this.gameState.coins_per_second = this.gameState.upgrades.auto_clickers * 0.1;
-                    break;
-                    
-                case 'click_bot':
-                    // CORREÇÃO: Cada click_bot adiciona 0.5 moedas/segundo
-                    this.gameState.coins_per_second = (this.gameState.upgrades.auto_clickers * 0.1) + 
-                                                     (this.gameState.upgrades.click_bots * 0.5);
-                    break;
-            }
+            // Atualizar estatísticas do jogo
+            this.updateGameStats();
             
             this.showMessage(`✅ Upgrade comprado: ${this.getUpgradeName(upgradeType)} Nv. ${this.gameState.upgrades[upgradeType]}`, 'success');
             this.updateUI();
             this.checkAchievements();
-            await this.saveGameState();
+            await this.saveGameState(true); // Forçar save após upgrade
             
         } else {
             this.showMessage('❌ Moedas insuficientes!', 'error');
@@ -274,6 +344,15 @@ class PopCoinGame {
                 setTimeout(() => button.classList.remove('shake'), 500);
             }
         }
+    }
+
+    updateGameStats() {
+        // Atualizar coins_per_click baseado no upgrade de click_power
+        this.gameState.coins_per_click = 1 + this.gameState.upgrades.click_power;
+        
+        // Atualizar coins_per_second baseado nos upgrades
+        this.gameState.coins_per_second = (this.gameState.upgrades.auto_clickers * 0.1) + 
+                                         (this.gameState.upgrades.click_bots * 0.5);
     }
 
     calculateUpgradeCost(baseCost, currentLevel) {
@@ -292,11 +371,11 @@ class PopCoinGame {
 
     updateUI() {
         // Atualizar estatísticas principais
-        this.updateElementText('coins-count', Math.floor(this.gameState.coins));
+        this.updateElementText('coins-count', this.formatNumber(Math.floor(this.gameState.coins)));
         this.updateElementText('coins-per-click', this.gameState.coins_per_click);
         this.updateElementText('coins-per-second', this.gameState.coins_per_second.toFixed(1));
         this.updateElementText('prestige-level', this.gameState.prestige_level);
-        this.updateElementText('total-clicks', this.gameState.click_count);
+        this.updateElementText('total-clicks', this.formatNumber(this.gameState.click_count));
 
         // Atualizar informações de upgrades
         this.updateElementText('click-power-level', this.gameState.upgrades.click_power);
@@ -316,7 +395,7 @@ class PopCoinGame {
             const cost = this.calculateUpgradeCost(baseCost, currentLevel);
             
             if (costElement) {
-                costElement.textContent = cost;
+                costElement.textContent = this.formatNumber(cost);
             }
             
             // Desabilitar botão se não tiver moedas suficientes
@@ -330,6 +409,9 @@ class PopCoinGame {
             }
         });
 
+        // Atualizar botão de prestígio
+        this.updatePrestigeButton();
+
         // Atualizar conquistas
         this.updateAchievements();
     }
@@ -338,6 +420,33 @@ class PopCoinGame {
         const element = document.getElementById(elementId);
         if (element) {
             element.textContent = text;
+        }
+    }
+
+    updatePrestigeButton() {
+        const prestigeButton = document.getElementById('prestige-button');
+        if (prestigeButton) {
+            const prestigeBonus = Math.floor(this.gameState.total_coins / 10000);
+            prestigeButton.textContent = `Fazer Prestígio (${prestigeBonus}x)`;
+            prestigeButton.disabled = this.gameState.total_coins < 10000;
+            
+            if (prestigeButton.disabled) {
+                prestigeButton.classList.add('cant-afford');
+            } else {
+                prestigeButton.classList.remove('cant-afford');
+            }
+        }
+    }
+
+    updateSaveStatus(message) {
+        const saveStatus = document.getElementById('save-status');
+        if (saveStatus) {
+            saveStatus.textContent = message;
+            setTimeout(() => {
+                if (saveStatus.textContent === message) {
+                    saveStatus.textContent = '💾 Salvamento automático ativo';
+                }
+            }, 3000);
         }
     }
 
@@ -359,6 +468,11 @@ class PopCoinGame {
         if (totalUpgrades >= 10 && !this.gameState.achievements.includes('industrial')) {
             achievements.push({ id: 'industrial', name: '🏭 Industrial', description: 'Tenha 10 upgrades' });
         }
+
+        // Conquista: Milionário
+        if (this.gameState.total_coins >= 1000000 && !this.gameState.achievements.includes('millionaire')) {
+            achievements.push({ id: 'millionaire', name: '💎 Milionário', description: 'Acumule 1 milhão de moedas' });
+        }
         
         // Adicionar novas conquistas
         achievements.forEach(achievement => {
@@ -366,6 +480,9 @@ class PopCoinGame {
                 this.gameState.achievements.push(achievement.id);
                 this.showMessage(`🏆 Conquista desbloqueada: ${achievement.name}`, 'achievement');
                 console.log(`🏆 Conquista: ${achievement.name}`);
+                
+                // Salvar quando desbloquear conquista
+                this.saveGameState(true);
             }
         });
     }
@@ -377,7 +494,8 @@ class PopCoinGame {
         const allAchievements = [
             { id: 'first_coins', name: '💰 Primeiras Moedas', description: 'Ganhe 100 moedas' },
             { id: 'fast_clicker', name: '⚡ Clique Rápido', description: 'Faça 50 cliques' },
-            { id: 'industrial', name: '🏭 Industrial', description: 'Tenha 10 upgrades' }
+            { id: 'industrial', name: '🏭 Industrial', description: 'Tenha 10 upgrades' },
+            { id: 'millionaire', name: '💎 Milionário', description: 'Acumule 1 milhão de moedas' }
         ];
         
         achievementsList.innerHTML = '';
@@ -387,30 +505,33 @@ class PopCoinGame {
             const achievementElement = document.createElement('div');
             achievementElement.className = `achievement ${achieved ? 'unlocked' : 'locked'}`;
             achievementElement.innerHTML = `
-                <strong>${achievement.name}</strong>
-                <span>${achievement.description}</span>
-                ${achieved ? '<span class="achievement-badge">✅</span>' : ''}
+                <div class="achievement-icon">${achieved ? '✅' : '🔒'}</div>
+                <div class="achievement-info">
+                    <strong>${achievement.name}</strong>
+                    <span>${achievement.description}</span>
+                </div>
             `;
             achievementsList.appendChild(achievementElement);
         });
     }
 
     prestige() {
-        // Sistema de prestígio básico
+        // Sistema de prestígio
         if (this.gameState.total_coins >= 10000) {
             const prestigeBonus = Math.floor(this.gameState.total_coins / 10000);
             
-            if (confirm(`Fazer prestígio? Você ganhará ${prestigeBonus}x multiplicador mas resetará seu progresso!`)) {
+            if (confirm(`Fazer prestígio? Você ganhará ${prestigeBonus}x multiplicador mas resetará seu progresso!\n\nIsso inclui:\n- Todas as moedas\n- Todos os upgrades\n- Todas as conquistas\n\nVocê manterá apenas seu nível de prestígio.`)) {
                 this.gameState.prestige_level += 1;
                 this.gameState.coins = 0;
                 this.gameState.coins_per_click = 1 + prestigeBonus;
                 this.gameState.coins_per_second = 0;
                 this.gameState.upgrades = { click_power: 0, auto_clickers: 0, click_bots: 0 };
                 this.gameState.click_count = 0;
+                this.gameState.achievements = [];
                 
                 this.showMessage(`🎉 Prestígio ${this.gameState.prestige_level}! Multiplicador: ${prestigeBonus}x`, 'prestige');
                 this.updateUI();
-                this.saveGameState();
+                this.saveGameState(true);
             }
         } else {
             this.showMessage('❌ Precisa de 10,000 moedas totais para fazer prestígio!', 'error');
@@ -418,7 +539,13 @@ class PopCoinGame {
     }
 
     showMessage(message, type = 'info') {
-        // Criar elemento de mensagem se não existir
+        // Usar o sistema de mensagens do authManager se disponível
+        if (window.authManager && window.authManager.showMessage) {
+            window.authManager.showMessage(message, type);
+            return;
+        }
+        
+        // Fallback: sistema de mensagens próprio
         let messageContainer = document.getElementById('message-container');
         if (!messageContainer) {
             messageContainer = document.createElement('div');
@@ -427,8 +554,8 @@ class PopCoinGame {
                 position: fixed;
                 top: 20px;
                 right: 20px;
-                z-index: 1000;
-                max-width: 300px;
+                z-index: 10000;
+                max-width: 400px;
             `;
             document.body.appendChild(messageContainer);
         }
@@ -437,34 +564,57 @@ class PopCoinGame {
         messageElement.className = `message message-${type}`;
         messageElement.textContent = message;
         messageElement.style.cssText = `
-            background: ${type === 'error' ? '#ff4444' : type === 'success' ? '#44ff44' : type === 'achievement' ? '#ffaa00' : '#4444ff'};
+            background: ${this.getMessageColor(type)};
             color: white;
-            padding: 10px 15px;
-            margin: 5px 0;
-            border-radius: 5px;
-            animation: slideIn 0.3s ease-out;
+            padding: 12px 16px;
+            margin: 8px 0;
+            border-radius: 8px;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideInRight 0.3s ease-out;
         `;
         
         messageContainer.appendChild(messageElement);
         
-        // Remover após 3 segundos
+        // Auto-remover após 5 segundos
         setTimeout(() => {
             if (messageElement.parentNode) {
-                messageElement.style.animation = 'slideOut 0.3s ease-in';
+                messageElement.style.animation = 'slideOutRight 0.3s ease-in';
                 setTimeout(() => {
                     if (messageElement.parentNode) {
-                        messageElement.parentNode.removeChild(messageElement);
+                        messageElement.remove();
                     }
                 }, 300);
             }
-        }, 3000);
+        }, 5000);
         
         console.log(`💬 ${type}: ${message}`);
     }
 
+    getMessageColor(type) {
+        const colors = {
+            'error': '#dc3545',
+            'success': '#28a745',
+            'warning': '#ffc107',
+            'info': '#17a2b8',
+            'achievement': '#ff6b00',
+            'prestige': '#9c27b0'
+        };
+        return colors[type] || colors.info;
+    }
+
+    formatNumber(num) {
+        if (num >= 1000000) {
+            return (num / 1000000).toFixed(1) + 'M';
+        } else if (num >= 1000) {
+            return (num / 1000).toFixed(1) + 'K';
+        }
+        return num.toString();
+    }
+
     startGameLoop() {
         this.gameLoopInterval = setInterval(() => {
-            // CORREÇÃO: Gerar moedas automáticas de forma consistente
+            // Gerar moedas automáticas de forma consistente
             if (this.gameState.coins_per_second > 0) {
                 const autoEarnings = this.gameState.coins_per_second / 10; // 10 updates por segundo
                 
@@ -472,7 +622,7 @@ class PopCoinGame {
                 this.gameState.total_coins += autoEarnings;
                 
                 // Atualizar UI a cada segundo para performance
-                if (Date.now() % 1000 < 100) { // Aproximadamente 1x por segundo
+                if (Date.now() % 1000 < 100) {
                     this.updateUI();
                 }
             }
@@ -487,10 +637,13 @@ class PopCoinGame {
 
     hideLoading() {
         this.isLoading = false;
-        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingOverlay = document.getElementById('game-loading-overlay');
         if (loadingOverlay) {
             loadingOverlay.style.display = 'none';
         }
+        
+        // Mostrar mensagem de boas-vindas
+        this.showMessage('🎮 Jogo carregado! Clique na moeda para começar!', 'success');
     }
 
     // Limpar intervals quando a página for fechada
@@ -503,7 +656,7 @@ class PopCoinGame {
             clearInterval(this.autoSaveInterval);
             this.autoSaveInterval = null;
         }
-        this.saveGameState();
+        this.saveGameState(true); // Forçar save final
         console.log('🎮 Jogo finalizado');
     }
 }
@@ -519,12 +672,12 @@ document.addEventListener('DOMContentLoaded', () => {
 // Adicionar estilos CSS para animações
 const style = document.createElement('style');
 style.textContent = `
-    @keyframes slideIn {
+    @keyframes slideInRight {
         from { transform: translateX(100%); opacity: 0; }
         to { transform: translateX(0); opacity: 1; }
     }
     
-    @keyframes slideOut {
+    @keyframes slideOutRight {
         from { transform: translateX(0); opacity: 1; }
         to { transform: translateX(100%); opacity: 0; }
     }
@@ -542,21 +695,56 @@ style.textContent = `
     .cant-afford {
         opacity: 0.6;
         filter: grayscale(1);
+        cursor: not-allowed;
+    }
+    
+    .achievement {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.75rem;
+        border-radius: 8px;
+        margin: 0.5rem 0;
+        transition: all 0.3s ease;
     }
     
     .achievement.unlocked {
-        background: linear-gradient(45deg, #ffd700, #ffaa00);
+        background: linear-gradient(45deg, #fff3cd, #ffecb5);
+        border: 1px solid #ffeaa7;
         color: #000;
     }
     
     .achievement.locked {
-        background: #333;
-        color: #888;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        color: #6c757d;
     }
     
-    .achievement-badge {
-        float: right;
-        font-weight: bold;
+    .achievement-icon {
+        font-size: 1.25rem;
+    }
+    
+    .achievement-info {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .achievement-info strong {
+        font-size: 0.9rem;
+    }
+    
+    .achievement-info span {
+        font-size: 0.8rem;
+        opacity: 0.8;
+    }
+    
+    /* Melhorias de responsividade */
+    @media (max-width: 768px) {
+        #profile-link {
+            margin-left: 0.5rem !important;
+            padding: 0.5rem 0.75rem !important;
+            font-size: 0.8rem;
+        }
     }
 `;
 document.head.appendChild(style);

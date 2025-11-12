@@ -1,8 +1,13 @@
 import os
 import json
 import time
-from datetime import timedelta
+import logging
+from datetime import timedelta, datetime
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-popcoin-32-chars-here')
@@ -22,40 +27,43 @@ FIREBASE_CONFIG = {
 try:
     from auth.auth_manager import AuthManager
     auth_manager = AuthManager()
-    print("✅ AuthManager carregado")
+    logger.info("✅ AuthManager carregado")
 except Exception as e:
-    print(f"⚠️ AuthManager não disponível: {e}")
+    logger.warning(f"⚠️ AuthManager não disponível: {e}")
     auth_manager = None
 
 try:
     from game.game_logic import GameManager
     game_manager = GameManager()
-    print("✅ GameManager carregado")
+    logger.info("✅ GameManager carregado")
 except Exception as e:
-    print(f"⚠️ GameManager não disponível: {e}")
+    logger.warning(f"⚠️ GameManager não disponível: {e}")
     game_manager = None
 
 try:
-    from database.db_models import init_db
-    init_db()
-    print("✅ Database inicializado")
+    from database.db_models import DatabaseManager
+    db_manager = DatabaseManager()
+    logger.info("✅ DatabaseManager carregado")
 except Exception as e:
-    print(f"⚠️ Database não disponível: {e}")
+    logger.warning(f"⚠️ DatabaseManager não disponível: {e}")
+    db_manager = None
 
 @app.before_request
 def make_session_permanent():
     session.permanent = True
     session.modified = True
 
+# ========== ROTAS PRINCIPAIS ==========
+
 @app.route('/')
 def index():
     """Página inicial"""
     user_info = session.get('user')
-    print(f"🏠 Página inicial - Sessão: {user_info}")
+    logger.info(f"🏠 Página inicial - Sessão: {user_info}")
     
     # Se usuário já está autenticado, redirecionar para o jogo
     if user_info:
-        print("🔄 Usuário autenticado na página inicial, redirecionando...")
+        logger.info("🔄 Usuário autenticado na página inicial, redirecionando...")
         return redirect('/game')
     
     return render_template('index.html', firebase_config=FIREBASE_CONFIG)
@@ -64,22 +72,34 @@ def index():
 def game():
     """Página principal do jogo"""
     user_info = session.get('user')
-    print(f"🎮 Página do jogo - Sessão: {user_info}")
+    logger.info(f"🎮 Página do jogo - Sessão: {user_info}")
     
     if not user_info:
-        print("❌ Usuário não autenticado, redirecionando para index")
+        logger.warning("❌ Usuário não autenticado, redirecionando para index")
         return redirect('/')
     
     return render_template('game.html', firebase_config=FIREBASE_CONFIG)
 
-# ========== API ROUTES ==========
+@app.route('/profile')
+def profile():
+    """Página de perfil do usuário"""
+    user_info = session.get('user')
+    logger.info(f"👤 Página de perfil - Sessão: {user_info}")
+    
+    if not user_info:
+        logger.warning("❌ Usuário não autenticado, redirecionando para index")
+        return redirect('/')
+    
+    return render_template('profile.html', firebase_config=FIREBASE_CONFIG)
+
+# ========== API DE AUTENTICAÇÃO ==========
 
 @app.route('/api/auth/status')
 def auth_status():
     """Verificar status de autenticação"""
     try:
         user_info = session.get('user')
-        print(f"📡 Verificando status - Sessão: {user_info}")
+        logger.info(f"📡 Verificando status - Sessão: {user_info}")
         
         if user_info:
             return jsonify({
@@ -92,12 +112,12 @@ def auth_status():
                 'user': None
             })
     except Exception as e:
-        print(f"❌ Erro em auth_status: {e}")
+        logger.error(f"❌ Erro em auth_status: {e}")
         return jsonify({'authenticated': False, 'user': None})
 
 @app.route('/api/auth/login', methods=['POST'])
 def auth_login():
-    """Processar login"""
+    """Processar login com token do Firebase"""
     if not auth_manager:
         return jsonify({'error': 'Sistema de autenticação não disponível'}), 503
     
@@ -108,41 +128,289 @@ def auth_login():
         if not token:
             return jsonify({'error': 'Token não fornecido'}), 400
 
-        print("🔐 Verificando token Firebase...")
+        logger.info("🔐 Verificando token Firebase...")
         user_info = auth_manager.verify_firebase_token(token)
         
         if user_info:
+            # Inicializar estrutura completa do usuário na sessão
+            session_user_data = {
+                'uid': user_info['uid'],
+                'email': user_info['email'],
+                'name': user_info.get('name', user_info['email'].split('@')[0]),
+                'picture': user_info.get('picture'),
+                'email_verified': user_info.get('email_verified', False),
+                'created_at': datetime.now().isoformat(),
+                'last_login': datetime.now().isoformat(),
+                'game_data': {
+                    'popcoins': 0,
+                    'clicks': 0,
+                    'level': 1,
+                    'experience': 0
+                },
+                'preferences': {
+                    'notifications': True,
+                    'sound_effects': True,
+                    'music': True
+                }
+            }
+            
+            # Tentar carregar dados existentes do usuário
+            if db_manager:
+                try:
+                    existing_data = db_manager.get_user_data(user_info['uid'])
+                    if existing_data:
+                        session_user_data.update(existing_data)
+                        logger.info(f"✅ Dados existentes carregados para: {user_info['uid']}")
+                except Exception as db_error:
+                    logger.warning(f"⚠️ Erro ao carregar dados do usuário: {db_error}")
+            
             # Configurar sessão
-            session['user'] = user_info
-            session['user_id'] = user_info['uid']  # Aqui está correto
+            session['user'] = session_user_data
+            session['user_id'] = user_info['uid']
             session.modified = True
             
-            # CORREÇÃO: Mudar 'user_id' para 'uid' no print
-            print(f"✅ Login bem-sucedido: {user_info['uid']}")  # ← LINHA CORRIGIDA
+            # Salvar dados no banco se disponível
+            if db_manager:
+                try:
+                    db_manager.save_user_data(user_info['uid'], session_user_data)
+                    logger.info(f"✅ Dados salvos no banco para: {user_info['uid']}")
+                except Exception as db_error:
+                    logger.warning(f"⚠️ Erro ao salvar dados no banco: {db_error}")
+            
+            logger.info(f"✅ Login bem-sucedido: {user_info['uid']}")
             
             return jsonify({
                 'success': True,
-                'user': user_info,
+                'user': session_user_data,
                 'message': 'Login realizado com sucesso'
             })
         else:
-            print("❌ Token inválido")
+            logger.warning("❌ Token inválido")
             return jsonify({'error': 'Token inválido ou expirado'}), 401
             
     except Exception as e:
-        print(f"❌ Erro no login: {e}")
+        logger.error(f"❌ Erro no login: {e}")
         return jsonify({'error': 'Erro interno no servidor'}), 500
 
 @app.route('/api/auth/logout', methods=['POST'])
 def auth_logout():
     """Fazer logout completo"""
     try:
+        user_info = session.get('user')
+        if user_info and db_manager:
+            # Salvar dados antes de fazer logout
+            try:
+                db_manager.save_user_data(user_info['uid'], user_info)
+                logger.info(f"💾 Dados salvos antes do logout: {user_info['uid']}")
+            except Exception as db_error:
+                logger.warning(f"⚠️ Erro ao salvar dados no logout: {db_error}")
+        
         session.clear()
-        print("✅ Logout realizado")
+        logger.info("✅ Logout realizado")
         return jsonify({'success': True, 'message': 'Logout realizado'})
     except Exception as e:
-        print(f"❌ Erro no logout: {e}")
+        logger.error(f"❌ Erro no logout: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/auth/verify', methods=['POST'])
+def auth_verify():
+    """Verificar token do Firebase (para requisições autenticadas)"""
+    if not auth_manager:
+        return jsonify({'error': 'Sistema de autenticação não disponível'}), 503
+    
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Token não fornecido'}), 401
+            
+        token = auth_header.split('Bearer ')[1]
+        user_info = auth_manager.verify_firebase_token(token)
+        
+        if user_info:
+            return jsonify({
+                'authenticated': True,
+                'user': user_info
+            })
+        else:
+            return jsonify({'authenticated': False}), 401
+            
+    except Exception as e:
+        logger.error(f"❌ Erro na verificação: {e}")
+        return jsonify({'error': 'Erro interno no servidor'}), 500
+
+# ========== API DE USUÁRIO E PERFIL ==========
+
+@app.route('/api/user/sync', methods=['POST'])
+def user_sync():
+    """Sincronizar dados do usuário com informações atualizadas do Firebase"""
+    if not auth_manager:
+        return jsonify({'error': 'Sistema de autenticação não disponível'}), 503
+    
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Token não fornecido'}), 401
+            
+        token = auth_header.split('Bearer ')[1]
+        user_info = auth_manager.verify_firebase_token(token)
+        
+        if not user_info:
+            return jsonify({'error': 'Token inválido'}), 401
+        
+        # Obter dados da sessão atual
+        session_user = session.get('user')
+        if not session_user:
+            return jsonify({'error': 'Sessão não encontrada'}), 401
+        
+        # Atualizar dados do usuário com informações do Firebase
+        session_user.update({
+            'name': user_info.get('name', session_user.get('name')),
+            'picture': user_info.get('picture', session_user.get('picture')),
+            'email_verified': user_info.get('email_verified', session_user.get('email_verified', False)),
+            'last_login': datetime.now().isoformat()
+        })
+        
+        session['user'] = session_user
+        session.modified = True
+        
+        # Salvar no banco se disponível
+        if db_manager:
+            try:
+                db_manager.save_user_data(user_info['uid'], session_user)
+            except Exception as db_error:
+                logger.warning(f"⚠️ Erro ao salvar dados na sincronização: {db_error}")
+        
+        logger.info(f"✅ Dados sincronizados para: {user_info['uid']}")
+        return jsonify({'success': True, 'user': session_user})
+        
+    except Exception as e:
+        logger.error(f"❌ Erro na sincronização: {e}")
+        return jsonify({'error': 'Erro interno no servidor'}), 500
+
+@app.route('/api/user/profile', methods=['GET', 'PUT'])
+def user_profile():
+    """Obter ou atualizar perfil do usuário"""
+    user_info = session.get('user')
+    if not user_info:
+        return jsonify({'error': 'Não autenticado'}), 401
+
+    try:
+        if request.method == 'GET':
+            # Retornar perfil completo do usuário
+            return jsonify({
+                'success': True, 
+                'profile': user_info
+            })
+            
+        elif request.method == 'PUT':
+            # Atualizar perfil do usuário
+            data = request.get_json()
+            
+            # Campos permitidos para atualização
+            allowed_fields = ['name', 'preferences']
+            updates = {}
+            
+            for field in allowed_fields:
+                if field in data:
+                    if field == 'preferences':
+                        # Mesclar preferências em vez de substituir
+                        current_prefs = user_info.get('preferences', {})
+                        current_prefs.update(data['preferences'])
+                        updates['preferences'] = current_prefs
+                    else:
+                        updates[field] = data[field]
+            
+            # Aplicar atualizações
+            user_info.update(updates)
+            user_info['updated_at'] = datetime.now().isoformat()
+            
+            session['user'] = user_info
+            session.modified = True
+            
+            # Salvar no banco se disponível
+            if db_manager:
+                try:
+                    db_manager.save_user_data(user_info['uid'], user_info)
+                except Exception as db_error:
+                    logger.warning(f"⚠️ Erro ao salvar perfil no banco: {db_error}")
+            
+            logger.info(f"✅ Perfil atualizado: {user_info['uid']}")
+            return jsonify({
+                'success': True, 
+                'message': 'Perfil atualizado com sucesso',
+                'profile': user_info
+            })
+            
+    except Exception as e:
+        logger.error(f"❌ Erro no perfil: {e}")
+        return jsonify({'error': 'Erro interno no servidor'}), 500
+
+@app.route('/api/user/create', methods=['POST'])
+def user_create():
+    """Criar perfil de usuário (para novos registros)"""
+    if not auth_manager:
+        return jsonify({'error': 'Sistema de autenticação não disponível'}), 503
+    
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Token não fornecido'}), 401
+            
+        token = auth_header.split('Bearer ')[1]
+        user_info = auth_manager.verify_firebase_token(token)
+        
+        if not user_info:
+            return jsonify({'error': 'Token inválido'}), 401
+        
+        data = request.get_json()
+        
+        # Criar estrutura completa do usuário
+        new_user_data = {
+            'uid': user_info['uid'],
+            'email': user_info['email'],
+            'name': data.get('name', user_info.get('name', user_info['email'].split('@')[0])),
+            'picture': data.get('photo_url', user_info.get('picture')),
+            'email_verified': user_info.get('email_verified', False),
+            'created_at': datetime.now().isoformat(),
+            'last_login': datetime.now().isoformat(),
+            'game_data': {
+                'popcoins': 0,
+                'clicks': 0,
+                'level': 1,
+                'experience': 0
+            },
+            'preferences': {
+                'notifications': True,
+                'sound_effects': True,
+                'music': True
+            }
+        }
+        
+        # Configurar sessão
+        session['user'] = new_user_data
+        session['user_id'] = user_info['uid']
+        session.modified = True
+        
+        # Salvar no banco se disponível
+        if db_manager:
+            try:
+                db_manager.save_user_data(user_info['uid'], new_user_data)
+                logger.info(f"✅ Novo usuário criado no banco: {user_info['uid']}")
+            except Exception as db_error:
+                logger.warning(f"⚠️ Erro ao criar usuário no banco: {db_error}")
+        
+        logger.info(f"✅ Novo perfil criado: {user_info['uid']}")
+        return jsonify({
+            'success': True,
+            'message': 'Perfil criado com sucesso',
+            'profile': new_user_data
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao criar usuário: {e}")
+        return jsonify({'error': 'Erro interno no servidor'}), 500
+
+# ========== API DO JOGO ==========
 
 @app.route('/api/game/state', methods=['GET', 'POST'])
 def game_state():
@@ -182,10 +450,30 @@ def game_state():
             success = game_manager.save_game_state(user_id, data)
             return jsonify({'success': success})
     except Exception as e:
-        print(f"❌ Erro no game_state: {e}")
+        logger.error(f"❌ Erro no game_state: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ========== SYSTEM ROUTES ==========
+@app.route('/api/user/ranking', methods=['GET'])
+def get_ranking():
+    """Obter ranking de jogadores"""
+    try:
+        if db_manager:
+            ranking = db_manager.get_ranking()
+            return jsonify({'success': True, 'ranking': ranking})
+        else:
+            # Ranking mock para desenvolvimento
+            mock_ranking = [
+                {'uid': 'user_1', 'name': 'Jogador Top', 'popcoins': 15000, 'level': 15},
+                {'uid': 'user_2', 'name': 'Clique Mestre', 'popcoins': 12000, 'level': 12},
+                {'uid': 'user_3', 'name': 'Coletor Ávido', 'popcoins': 8000, 'level': 10}
+            ]
+            return jsonify({'success': True, 'ranking': mock_ranking})
+            
+    except Exception as e:
+        logger.error(f"❌ Erro ao obter ranking: {e}")
+        return jsonify({'error': 'Erro interno do servidor'}), 500
+
+# ========== ROTAS DO SISTEMA ==========
 
 @app.route('/healthz')
 def health_check():
@@ -201,6 +489,7 @@ def system_health():
         'services': {
             'authentication': 'available' if auth_manager else 'unavailable',
             'game_system': 'available' if game_manager else 'unavailable',
+            'database': 'available' if db_manager else 'unavailable',
             'firebase': 'configured'
         }
     })
@@ -224,7 +513,24 @@ def debug_firebase():
         'config_keys': list(FIREBASE_CONFIG.keys()) if FIREBASE_CONFIG else None
     })
 
+# ========== MANIPULADOR DE ERROS ==========
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Endpoint não encontrado'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"❌ Erro interno: {error}")
+    return jsonify({'error': 'Erro interno do servidor'}), 500
+
+@app.errorhandler(401)
+def unauthorized(error):
+    return jsonify({'error': 'Não autorizado'}), 401
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    
+    logger.info(f"🚀 Iniciando PopCoin IDLE na porta {port} (debug: {debug_mode})")
     app.run(host='0.0.0.0', port=port, debug=debug_mode)

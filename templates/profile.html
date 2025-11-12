@@ -1,0 +1,970 @@
+{% extends "base.html" %}
+
+{% block title %}PopCoin IDLE - Meu Perfil{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="game-container">
+        <div class="game-header">
+            <div class="game-title">
+                <h1>👤 Meu Perfil</h1>
+                <div class="profile-actions">
+                    <a href="{{ url_for('game') }}" class="btn btn-secondary">
+                        🎮 Voltar ao Jogo
+                    </a>
+                    <button class="btn btn-primary" onclick="window.location.reload()">
+                        🔄 Atualizar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="profile-content">
+            <!-- Alertas e Mensagens -->
+            <div id="profile-messages"></div>
+
+            <div class="profile-grid">
+                <!-- Informações do Perfil -->
+                <div class="profile-card">
+                    <h3>📊 Informações Pessoais</h3>
+                    <div class="profile-info">
+                        <div class="profile-avatar-section">
+                            <div class="profile-avatar">
+                                <img id="profile-avatar-img" src="" alt="Avatar" class="user-avatar large">
+                                <div class="avatar-actions">
+                                    <button class="btn btn-secondary btn-small" onclick="changeAvatar()">
+                                        📷 Alterar Avatar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="profile-details">
+                            <div class="form-group">
+                                <label for="profile-name">Nome de exibição:</label>
+                                <input type="text" id="profile-name" class="profile-input" placeholder="Seu nome no jogo">
+                                <small class="form-help">Como você será chamado no jogo e ranking</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="profile-email">E-mail:</label>
+                                <input type="email" id="profile-email" class="profile-input" readonly>
+                                <small class="form-help">E-mail da sua conta (não pode ser alterado)</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="profile-created">Membro desde:</label>
+                                <input type="text" id="profile-created" class="profile-input" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label for="profile-id">ID do Usuário:</label>
+                                <input type="text" id="profile-id" class="profile-input" readonly>
+                                <small class="form-help">Seu identificador único no sistema</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="profile-actions">
+                        <button class="btn btn-primary" onclick="updateProfile()">
+                            💾 Salvar Alterações
+                        </button>
+                        <button class="btn btn-secondary" onclick="resetForm()">
+                            🔄 Cancelar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Estatísticas do Jogo -->
+                <div class="profile-card">
+                    <h3>🎮 Estatísticas do Jogo</h3>
+                    <div class="game-stats-grid">
+                        <div class="stat-item">
+                            <span class="stat-icon">🪙</span>
+                            <div class="stat-content">
+                                <span class="stat-label">PopCoins Atuais</span>
+                                <span class="stat-value" id="stat-popcoins">0</span>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-icon">👆</span>
+                            <div class="stat-content">
+                                <span class="stat-label">Total de Cliques</span>
+                                <span class="stat-value" id="stat-clicks">0</span>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-icon">⭐</span>
+                            <div class="stat-content">
+                                <span class="stat-label">Nível</span>
+                                <span class="stat-value" id="stat-level">1</span>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-icon">📈</span>
+                            <div class="stat-content">
+                                <span class="stat-label">Experiência</span>
+                                <span class="stat-value" id="stat-exp">0</span>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-icon">⚡</span>
+                            <div class="stat-content">
+                                <span class="stat-label">Moedas/Clique</span>
+                                <span class="stat-value" id="stat-coins-per-click">1</span>
+                            </div>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-icon">🔄</span>
+                            <div class="stat-content">
+                                <span class="stat-label">Moedas/Segundo</span>
+                                <span class="stat-value" id="stat-coins-per-second">0.0</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="progress-section">
+                        <h4>Progresso do Nível</h4>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="level-progress" style="width: 0%"></div>
+                        </div>
+                        <div class="progress-text">
+                            <span id="current-exp">0</span> / <span id="next-level-exp">100</span> EXP
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Preferências -->
+                <div class="profile-card">
+                    <h3>⚙️ Preferências</h3>
+                    <div class="preferences">
+                        <label class="preference-item">
+                            <input type="checkbox" id="pref-notifications">
+                            <span class="preference-label">
+                                <strong>🔔 Notificações</strong>
+                                <small>Receber notificações de conquistas e eventos</small>
+                            </span>
+                        </label>
+                        
+                        <label class="preference-item">
+                            <input type="checkbox" id="pref-sound">
+                            <span class="preference-label">
+                                <strong>🎵 Efeitos Sonoros</strong>
+                                <small>Ativar sons ao clicar e ganhar moedas</small>
+                            </span>
+                        </label>
+                        
+                        <label class="preference-item">
+                            <input type="checkbox" id="pref-music">
+                            <span class="preference-label">
+                                <strong>🎶 Música de Fundo</strong>
+                                <small>Reproduzir música ambiente durante o jogo</small>
+                            </span>
+                        </label>
+                        
+                        <label class="preference-item">
+                            <input type="checkbox" id="pref-autosave">
+                            <span class="preference-label">
+                                <strong>💾 Salvamento Automático</strong>
+                                <small>Salvar progresso automaticamente a cada 30 segundos</small>
+                            </span>
+                        </label>
+                    </div>
+                    
+                    <div class="preference-actions">
+                        <button class="btn btn-secondary" onclick="resetPreferences()">
+                            🔄 Restaurar Padrões
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Ranking e Conquistas -->
+                <div class="profile-card">
+                    <h3>🏆 Ranking & Conquistas</h3>
+                    <div class="ranking-section">
+                        <div class="ranking-current">
+                            <h4>Suas Posições</h4>
+                            <div class="ranking-item">
+                                <span class="rank-label">Ranking Global</span>
+                                <span class="rank-value" id="global-rank">-</span>
+                            </div>
+                            <div class="ranking-item">
+                                <span class="rank-label">Pontuação Total</span>
+                                <span class="rank-value" id="total-score">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="achievements-section">
+                        <h4>Conquistas Desbloqueadas</h4>
+                        <div id="profile-achievements" class="achievements-list">
+                            <div class="achievement-placeholder">
+                                🎯 As conquistas aparecerão aqui conforme você progride no jogo!
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gerenciamento de Conta -->
+                <div class="profile-card">
+                    <h3>🔒 Gerenciamento de Conta</h3>
+                    <div class="account-actions">
+                        <button class="btn btn-warning" onclick="changePassword()">
+                            🔑 Alterar Senha
+                        </button>
+                        <button class="btn btn-danger" onclick="exportData()">
+                            📤 Exportar Dados
+                        </button>
+                        <button class="btn btn-danger btn-outline" onclick="deleteAccount()">
+                            🗑️ Excluir Conta
+                        </button>
+                    </div>
+                    
+                    <div class="account-info">
+                        <h4>Informações da Sessão</h4>
+                        <div class="session-info">
+                            <div class="session-item">
+                                <span>Último login:</span>
+                                <span id="last-login">-</span>
+                            </div>
+                            <div class="session-item">
+                                <span>Sessão ativa desde:</span>
+                                <span id="session-start">-</span>
+                            </div>
+                            <div class="session-item">
+                                <span>Status da conta:</span>
+                                <span class="status-verified" id="account-status">Verificada</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+class ProfileManager {
+    constructor() {
+        this.userProfile = null;
+        this.originalData = null;
+        this.init();
+    }
+
+    async init() {
+        console.log('👤 Inicializando ProfileManager...');
+        await this.loadProfile();
+        this.setupEventListeners();
+        this.startAutoRefresh();
+    }
+
+    async loadProfile() {
+        try {
+            console.log('📥 Carregando perfil do usuário...');
+            
+            if (!window.authManager || !window.authManager.isAuthenticated) {
+                this.showMessage('Você precisa estar logado para acessar esta página', 'error');
+                setTimeout(() => window.location.href = '/', 2000);
+                return;
+            }
+
+            const token = await window.authManager.getAuthToken();
+            if (!token) {
+                throw new Error('Token de autenticação não disponível');
+            }
+
+            const response = await fetch('/api/user/profile', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.userProfile = data.profile;
+                this.originalData = JSON.parse(JSON.stringify(this.userProfile)); // Deep copy
+                this.updateProfileUI();
+                console.log('✅ Perfil carregado com sucesso');
+            } else {
+                throw new Error('Erro ao carregar perfil');
+            }
+        } catch (error) {
+            console.error('❌ Erro ao carregar perfil:', error);
+            this.showMessage('Erro ao carregar perfil: ' + error.message, 'error');
+        }
+    }
+
+    updateProfileUI() {
+        if (!this.userProfile) return;
+
+        // Informações básicas
+        document.getElementById('profile-name').value = this.userProfile.name || '';
+        document.getElementById('profile-email').value = this.userProfile.email || '';
+        document.getElementById('profile-id').value = this.userProfile.uid || 'N/A';
+        
+        // Data de criação
+        if (this.userProfile.created_at) {
+            const createdDate = new Date(this.userProfile.created_at).toLocaleDateString('pt-BR');
+            document.getElementById('profile-created').value = createdDate;
+        }
+
+        // Avatar
+        const avatarImg = document.getElementById('profile-avatar-img');
+        if (this.userProfile.picture) {
+            avatarImg.src = this.userProfile.picture;
+        } else {
+            avatarImg.src = '/static/images/default-avatar.png';
+        }
+
+        // Estatísticas do jogo
+        if (this.userProfile.game_data) {
+            const gameData = this.userProfile.game_data;
+            document.getElementById('stat-popcoins').textContent = this.formatNumber(gameData.popcoins || 0);
+            document.getElementById('stat-clicks').textContent = this.formatNumber(gameData.clicks || 0);
+            document.getElementById('stat-level').textContent = gameData.level || 1;
+            document.getElementById('stat-exp').textContent = this.formatNumber(gameData.experience || 0);
+            document.getElementById('stat-coins-per-click').textContent = gameData.coins_per_click || 1;
+            document.getElementById('stat-coins-per-second').textContent = (gameData.coins_per_second || 0).toFixed(1);
+            
+            // Progresso do nível
+            this.updateLevelProgress(gameData.experience || 0, gameData.level || 1);
+        }
+
+        // Preferências
+        if (this.userProfile.preferences) {
+            const prefs = this.userProfile.preferences;
+            document.getElementById('pref-notifications').checked = prefs.notifications !== false;
+            document.getElementById('pref-sound').checked = prefs.sound_effects !== false;
+            document.getElementById('pref-music').checked = prefs.music !== false;
+            document.getElementById('pref-autosave').checked = prefs.autosave !== false;
+        }
+
+        // Informações de sessão
+        if (this.userProfile.last_login) {
+            const lastLogin = new Date(this.userProfile.last_login).toLocaleString('pt-BR');
+            document.getElementById('last-login').textContent = lastLogin;
+        }
+
+        document.getElementById('session-start').textContent = new Date().toLocaleString('pt-BR');
+        
+        // Carregar ranking
+        this.loadRanking();
+        
+        // Carregar conquistas
+        this.loadAchievements();
+    }
+
+    updateLevelProgress(exp, level) {
+        const expNeeded = level * 100; // Fórmula simples: 100 EXP por nível
+        const progress = Math.min((exp / expNeeded) * 100, 100);
+        
+        document.getElementById('level-progress').style.width = progress + '%';
+        document.getElementById('current-exp').textContent = this.formatNumber(exp);
+        document.getElementById('next-level-exp').textContent = this.formatNumber(expNeeded);
+    }
+
+    async loadRanking() {
+        try {
+            const response = await fetch('/api/user/ranking');
+            if (response.ok) {
+                const data = await response.json();
+                this.updateRankingUI(data.ranking);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar ranking:', error);
+        }
+    }
+
+    updateRankingUI(ranking) {
+        if (!ranking || !this.userProfile) return;
+        
+        const currentUser = ranking.find(user => user.uid === this.userProfile.uid);
+        if (currentUser) {
+            document.getElementById('global-rank').textContent = `#${ranking.indexOf(currentUser) + 1}`;
+            document.getElementById('total-score').textContent = this.formatNumber(currentUser.popcoins || 0);
+        }
+    }
+
+    loadAchievements() {
+        // Simular conquistas - em produção viria do backend
+        const achievements = [
+            { id: 'first_coin', name: '💰 Primeira Moeda', description: 'Ganhe sua primeira moeda', unlocked: true },
+            { id: 'clicker', name: '👆 Clique Inicial', description: 'Faça 10 cliques', unlocked: true },
+            { id: 'collector', name: '🏆 Colecionador', description: 'Acumule 1000 moedas', unlocked: false },
+            { id: 'upgrader', name: '⚡ Upgrade Mestre', description: 'Compre 5 upgrades', unlocked: false }
+        ];
+
+        const achievementsList = document.getElementById('profile-achievements');
+        achievementsList.innerHTML = '';
+
+        achievements.forEach(achievement => {
+            const achievementEl = document.createElement('div');
+            achievementEl.className = `achievement ${achievement.unlocked ? 'unlocked' : 'locked'}`;
+            achievementEl.innerHTML = `
+                <div class="achievement-icon">${achievement.unlocked ? '✅' : '🔒'}</div>
+                <div class="achievement-info">
+                    <strong>${achievement.name}</strong>
+                    <small>${achievement.description}</small>
+                </div>
+            `;
+            achievementsList.appendChild(achievementEl);
+        });
+    }
+
+    async updateProfile() {
+        try {
+            const token = await window.authManager.getAuthToken();
+            if (!token) {
+                this.showMessage('Erro de autenticação', 'error');
+                return;
+            }
+
+            const updates = {
+                name: document.getElementById('profile-name').value.trim(),
+                preferences: {
+                    notifications: document.getElementById('pref-notifications').checked,
+                    sound_effects: document.getElementById('pref-sound').checked,
+                    music: document.getElementById('pref-music').checked,
+                    autosave: document.getElementById('pref-autosave').checked
+                }
+            };
+
+            // Validar nome
+            if (!updates.name) {
+                this.showMessage('Por favor, insira um nome de exibição', 'error');
+                return;
+            }
+
+            const response = await fetch('/api/user/profile', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(updates)
+            });
+
+            if (response.ok) {
+                this.showMessage('Perfil atualizado com sucesso!', 'success');
+                this.originalData = JSON.parse(JSON.stringify(this.userProfile));
+                await this.loadProfile(); // Recarregar dados
+            } else {
+                throw new Error('Erro ao atualizar perfil');
+            }
+        } catch (error) {
+            console.error('❌ Erro ao atualizar perfil:', error);
+            this.showMessage('Erro ao atualizar perfil: ' + error.message, 'error');
+        }
+    }
+
+    setupEventListeners() {
+        // Salvar ao pressionar Enter no nome
+        document.getElementById('profile-name').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.updateProfile();
+            }
+        });
+
+        // Detectar mudanças nos formulários
+        const inputs = document.querySelectorAll('.profile-input, input[type="checkbox"]');
+        inputs.forEach(input => {
+            input.addEventListener('change', () => {
+                this.checkForChanges();
+            });
+        });
+    }
+
+    checkForChanges() {
+        // Implementar detecção de mudanças se necessário
+    }
+
+    startAutoRefresh() {
+        // Atualizar estatísticas a cada 30 segundos
+        setInterval(() => {
+            this.loadProfile();
+        }, 30000);
+    }
+
+    formatNumber(num) {
+        if (num >= 1000000) {
+            return (num / 1000000).toFixed(1) + 'M';
+        } else if (num >= 1000) {
+            return (num / 1000).toFixed(1) + 'K';
+        }
+        return num.toString();
+    }
+
+    showMessage(message, type = 'info') {
+        const messageDiv = document.getElementById('profile-messages');
+        const messageEl = document.createElement('div');
+        messageEl.className = `message message-${type}`;
+        messageEl.textContent = message;
+        messageEl.style.cssText = `
+            padding: 12px 16px;
+            margin: 10px 0;
+            border-radius: 8px;
+            background: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#17a2b8'};
+            color: white;
+            font-weight: bold;
+        `;
+        
+        messageDiv.appendChild(messageEl);
+        
+        setTimeout(() => {
+            if (messageEl.parentNode) {
+                messageEl.style.opacity = '0';
+                messageEl.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => {
+                    if (messageEl.parentNode) {
+                        messageEl.remove();
+                    }
+                }, 500);
+            }
+        }, 5000);
+    }
+}
+
+// Funções globais
+function updateProfile() {
+    if (window.profileManager) {
+        window.profileManager.updateProfile();
+    }
+}
+
+function resetForm() {
+    if (window.profileManager && window.profileManager.originalData) {
+        window.profileManager.userProfile = JSON.parse(JSON.stringify(window.profileManager.originalData));
+        window.profileManager.updateProfileUI();
+        window.profileManager.showMessage('Alterações descartadas', 'info');
+    }
+}
+
+function resetPreferences() {
+    if (window.profileManager) {
+        document.getElementById('pref-notifications').checked = true;
+        document.getElementById('pref-sound').checked = true;
+        document.getElementById('pref-music').checked = true;
+        document.getElementById('pref-autosave').checked = true;
+        window.profileManager.showMessage('Preferências restauradas para os padrões', 'info');
+    }
+}
+
+function changeAvatar() {
+    // Implementação futura para upload de avatar
+    alert('Funcionalidade de upload de avatar em desenvolvimento!');
+}
+
+function changePassword() {
+    alert('Redirecionando para redefinição de senha...');
+    if (window.authManager) {
+        window.authManager.resetPassword();
+    }
+}
+
+function exportData() {
+    if (window.profileManager && window.profileManager.userProfile) {
+        const dataStr = JSON.stringify(window.profileManager.userProfile, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `popcoin-data-${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+}
+
+function deleteAccount() {
+    if (confirm('⚠️ ATENÇÃO: Esta ação é irreversível! Tem certeza que deseja excluir sua conta e todos os dados?')) {
+        if (confirm('❌ TODOS os seus dados serão perdidos permanentemente. Confirmar exclusão?')) {
+            alert('Funcionalidade de exclusão de conta em desenvolvimento.');
+        }
+    }
+}
+
+// Inicializar quando o DOM estiver pronto
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('👤 Inicializando página de perfil...');
+    
+    // Verificar se o usuário está autenticado
+    if (window.authManager && window.authManager.isAuthenticated) {
+        window.profileManager = new ProfileManager();
+    } else {
+        // Redirecionar para login se não estiver autenticado
+        console.log('❌ Usuário não autenticado, redirecionando...');
+        setTimeout(() => {
+            window.location.href = '/';
+        }, 1000);
+    }
+});
+</script>
+
+<style>
+.profile-content {
+    padding: 1rem 0;
+}
+
+.profile-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.profile-card {
+    background: var(--white);
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    border: 1px solid #e9ecef;
+}
+
+.profile-info {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2rem;
+    align-items: start;
+    margin-bottom: 1.5rem;
+}
+
+.profile-avatar-section {
+    text-align: center;
+}
+
+.profile-avatar {
+    margin-bottom: 1rem;
+}
+
+.user-avatar.large {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 4px solid var(--primary-color);
+    object-fit: cover;
+}
+
+.avatar-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.profile-details {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.profile-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid #e9ecef;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    transition: var(--transition);
+}
+
+.profile-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.profile-input:read-only {
+    background-color: #f8f9fa;
+    color: #666;
+    cursor: not-allowed;
+}
+
+.form-help {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: #666;
+}
+
+.profile-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.game-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: var(--border-radius);
+    transition: var(--transition);
+}
+
+.stat-item:hover {
+    background: #e9ecef;
+    transform: translateY(-2px);
+}
+
+.stat-icon {
+    font-size: 1.5rem;
+}
+
+.stat-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    color: var(--text-light);
+    margin-bottom: 0.25rem;
+}
+
+.stat-value {
+    font-size: 1.25rem;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.progress-section {
+    margin-top: 1.5rem;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0.5rem 0;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.progress-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: var(--text-light);
+}
+
+.preferences {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.preference-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.preference-item:hover {
+    background: #e9ecef;
+}
+
+.preference-item input[type="checkbox"] {
+    margin-top: 0.25rem;
+}
+
+.preference-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.preference-label strong {
+    color: var(--text-color);
+}
+
+.preference-label small {
+    color: var(--text-light);
+    font-size: 0.8rem;
+}
+
+.preference-actions {
+    margin-top: 1rem;
+    text-align: center;
+}
+
+.ranking-section {
+    margin-bottom: 1.5rem;
+}
+
+.ranking-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: var(--border-radius);
+    margin-bottom: 0.5rem;
+}
+
+.rank-label {
+    color: var(--text-light);
+}
+
+.rank-value {
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.achievements-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.achievement {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    border-radius: var(--border-radius);
+    transition: var(--transition);
+}
+
+.achievement.unlocked {
+    background: linear-gradient(45deg, #fff3cd, #ffecb5);
+    border: 1px solid #ffeaa7;
+}
+
+.achievement.locked {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    color: #6c757d;
+}
+
+.achievement-icon {
+    font-size: 1.25rem;
+}
+
+.achievement-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.achievement-placeholder {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-light);
+    font-style: italic;
+}
+
+.account-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.btn-warning {
+    background: #ffc107;
+    color: #000;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-outline {
+    background: transparent;
+    border: 2px solid currentColor;
+}
+
+.session-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.session-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    background: #f8f9fa;
+    border-radius: var(--border-radius);
+}
+
+.status-verified {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.btn-small {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+/* Responsividade */
+@media (max-width: 1024px) {
+    .profile-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .profile-info {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+        text-align: center;
+    }
+    
+    .game-stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .account-actions {
+        grid-template-columns: 1fr;
+    }
+    
+    .profile-actions {
+        flex-direction: column;
+    }
+    
+    .preference-item {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .profile-card {
+        padding: 1rem;
+    }
+    
+    .stat-item {
+        flex-direction: column;
+        text-align: center;
+        gap: 0.5rem;
+    }
+    
+    .ranking-item {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+}
+</style>
+{% endblock %}

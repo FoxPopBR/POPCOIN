@@ -35,9 +35,14 @@
         <div class="auth-card text-center">
             <h2>🎉 Bem-vindo de volta!</h2>
             <p>Seu império aguarda por você. Continue sua jornada!</p>
-            <a href="{{ url_for('game') }}" class="btn btn-primary btn-large mt-2">
-                🎮 Continuar Jogando
-            </a>
+            <div class="action-buttons">
+                <a href="{{ url_for('game') }}" class="btn btn-primary btn-large">
+                    🎮 Continuar Jogando
+                </a>
+                <a href="{{ url_for('profile') }}" class="btn btn-secondary">
+                    👤 Meu Perfil
+                </a>
+            </div>
         </div>
     </div>
     
@@ -64,20 +69,20 @@
                     <input type="password" id="login-password" placeholder="Sua senha" autocomplete="current-password" required>
                 </div>
                 
-                <!-- BOTÃO CORRETO: Email Login -->
                 <button type="button" class="btn btn-primary" onclick="handleEmailLogin()">
                     🔐 Entrar com E-mail
                 </button>
                 
-                <div class="text-center mt-1">
-                    <button type="button" class="btn btn-secondary" onclick="handleResetPassword()">
+                <div class="form-options">
+                    <button type="button" class="btn-link" onclick="handleResetPassword()">
                         🔑 Esqueci minha senha
                     </button>
                 </div>
                 
-                <div class="separator">ou</div>
+                <div class="separator">
+                    <span>ou</span>
+                </div>
                 
-                <!-- BOTÃO CORRETO: Google Login -->
                 <button type="button" class="btn btn-google" onclick="handleGoogleLogin()">
                     <span class="btn-icon">🔗</span>
                     Entrar com Google
@@ -99,21 +104,26 @@
                 <div class="form-group">
                     <label for="register-password">Senha:</label>
                     <input type="password" id="register-password" placeholder="Mínimo 6 caracteres" autocomplete="new-password" minlength="6" required>
+                    <div class="password-strength" id="password-strength">
+                        <div class="strength-bar"></div>
+                        <span class="strength-text">Força da senha</span>
+                    </div>
                 </div>
                 
                 <div class="form-group">
                     <label for="register-confirm">Confirmar senha:</label>
                     <input type="password" id="register-confirm" placeholder="Digite novamente" autocomplete="new-password" required>
+                    <div class="password-match" id="password-match"></div>
                 </div>
                 
-                <!-- BOTÃO CORRETO: Email Register -->
                 <button type="button" class="btn btn-primary" onclick="handleEmailRegister()">
                     📝 Criar Conta
                 </button>
                 
-                <div class="separator">ou</div>
+                <div class="separator">
+                    <span>ou</span>
+                </div>
                 
-                <!-- BOTÃO CORRETO: Google Register -->
                 <button type="button" class="btn btn-google" onclick="handleGoogleLogin()">
                     <span class="btn-icon">🔗</span>
                     Cadastrar com Google
@@ -122,7 +132,7 @@
             
             <div class="game-preview mt-2">
                 <h4>🎯 O que você ganha:</h4>
-                <ul>
+                <ul class="benefits-list">
                     <li>✅ Progresso salvo na nuvem</li>
                     <li>✅ Ganhos automáticos offline</li>
                     <li>✅ Sistema de conquistas exclusivas</li>
@@ -140,6 +150,8 @@
 <script>
 // Sistema de abas
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🎯 Inicializando sistema de abas...');
+    
     const tabs = document.querySelectorAll('.auth-tab');
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');
@@ -147,6 +159,7 @@ document.addEventListener('DOMContentLoaded', function() {
     tabs.forEach(tab => {
         tab.addEventListener('click', function() {
             const tabName = this.dataset.tab;
+            console.log(`📑 Alternando para aba: ${tabName}`);
             
             // Ativar aba clicada
             tabs.forEach(t => t.classList.remove('active'));
@@ -162,6 +175,21 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    // Configurar validação de senha em tempo real
+    const registerPassword = document.getElementById('register-password');
+    const registerConfirm = document.getElementById('register-confirm');
+    
+    if (registerPassword) {
+        registerPassword.addEventListener('input', checkPasswordStrength);
+    }
+    
+    if (registerConfirm) {
+        registerConfirm.addEventListener('input', checkPasswordMatch);
+    }
+
+    // Enter key nos formulários
+    setupEnterKeyListeners();
 });
 
 // Sistema de atualização de UI para a página inicial
@@ -170,9 +198,11 @@ function updatePageSections() {
     const welcomeSection = document.getElementById('welcome-section');
     
     if (window.authManager && window.authManager.isAuthenticated) {
+        console.log('✅ Usuário autenticado, mostrando seção do jogo');
         if (gameSection) gameSection.classList.remove('hidden');
         if (welcomeSection) welcomeSection.classList.add('hidden');
     } else {
+        console.log('🔐 Usuário não autenticado, mostrando seção de boas-vindas');
         if (gameSection) gameSection.classList.add('hidden');
         if (welcomeSection) welcomeSection.classList.remove('hidden');
     }
@@ -180,91 +210,280 @@ function updatePageSections() {
 
 // Observar mudanças no estado de autenticação
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🔍 Configurando observador de autenticação...');
+    
     const checkAuthReady = setInterval(() => {
         if (window.authManager) {
             clearInterval(checkAuthReady);
+            console.log('✅ AuthManager detectado, configurando observador...');
             
-            const originalUpdateUI = window.authManager.updateUI;
-            window.authManager.updateUI = function(user) {
-                if (originalUpdateUI) {
-                    originalUpdateUI.call(this, user);
-                }
+            // Observar mudanças no estado de autenticação
+            window.addEventListener('authStateChanged', function(event) {
+                console.log('🔄 Evento de mudança de auth detectado:', event.detail);
                 updatePageSections();
-            };
+            });
             
+            // Atualizar inicialmente
             updatePageSections();
         }
     }, 100);
 });
 
-// Funções de handler simplificadas
-function handleEmailLogin() {
-    if (window.authManager && window.authManager.loginWithEmail) {
-        window.authManager.loginWithEmail();
-    } else {
-        showGlobalLoading('Carregando sistema...');
-        setTimeout(() => {
-            if (window.authManager && window.authManager.loginWithEmail) {
-                window.authManager.loginWithEmail();
-            } else {
-                hideGlobalLoading();
-                alert('Sistema de autenticação não carregado. Recarregue a página.');
-            }
-        }, 1000);
+// Validação de força da senha
+function checkPasswordStrength() {
+    const password = document.getElementById('register-password').value;
+    const strengthBar = document.querySelector('.strength-bar');
+    const strengthText = document.querySelector('.strength-text');
+    
+    if (!password) {
+        strengthBar.style.width = '0%';
+        strengthBar.style.background = '#ddd';
+        strengthText.textContent = 'Força da senha';
+        return;
     }
+    
+    let strength = 0;
+    if (password.length >= 6) strength += 25;
+    if (password.length >= 8) strength += 25;
+    if (/[A-Z]/.test(password)) strength += 25;
+    if (/[0-9]/.test(password)) strength += 25;
+    
+    strengthBar.style.width = strength + '%';
+    
+    if (strength < 50) {
+        strengthBar.style.background = '#dc3545';
+        strengthText.textContent = 'Fraca';
+    } else if (strength < 75) {
+        strengthBar.style.background = '#ffc107';
+        strengthText.textContent = 'Média';
+    } else {
+        strengthBar.style.background = '#28a745';
+        strengthText.textContent = 'Forte';
+    }
+}
+
+// Validação de confirmação de senha
+function checkPasswordMatch() {
+    const password = document.getElementById('register-password').value;
+    const confirm = document.getElementById('register-confirm').value;
+    const matchDiv = document.getElementById('password-match');
+    
+    if (!confirm) {
+        matchDiv.innerHTML = '';
+        return;
+    }
+    
+    if (password === confirm) {
+        matchDiv.innerHTML = '<span style="color: #28a745;">✅ Senhas coincidem</span>';
+    } else {
+        matchDiv.innerHTML = '<span style="color: #dc3545;">❌ Senhas não coincidem</span>';
+    }
+}
+
+// Configurar listeners para tecla Enter
+function setupEnterKeyListeners() {
+    const loginEmail = document.getElementById('login-email');
+    const loginPassword = document.getElementById('login-password');
+    const registerName = document.getElementById('register-name');
+    const registerEmail = document.getElementById('register-email');
+    const registerPassword = document.getElementById('register-password');
+    const registerConfirm = document.getElementById('register-confirm');
+    
+    // Login form
+    if (loginPassword) {
+        loginPassword.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleEmailLogin();
+            }
+        });
+    }
+    
+    // Register form
+    if (registerConfirm) {
+        registerConfirm.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleEmailRegister();
+            }
+        });
+    }
+}
+
+// Funções de handler CORRETAS - usando o authManager diretamente
+function handleEmailLogin() {
+    console.log('🔐 Iniciando login com email...');
+    
+    if (!window.authManager) {
+        showAuthError('Sistema de autenticação não carregado. Recarregue a página.');
+        return;
+    }
+    
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    
+    if (!email || !password) {
+        showAuthError('Por favor, preencha email e senha.');
+        return;
+    }
+    
+    if (!isValidEmail(email)) {
+        showAuthError('Por favor, insira um email válido.');
+        return;
+    }
+    
+    window.authManager.loginWithEmail();
 }
 
 function handleEmailRegister() {
-    if (window.authManager && window.authManager.registerWithEmail) {
-        window.authManager.registerWithEmail();
-    } else {
-        showGlobalLoading('Carregando sistema...');
-        setTimeout(() => {
-            if (window.authManager && window.authManager.registerWithEmail) {
-                window.authManager.registerWithEmail();
-            } else {
-                hideGlobalLoading();
-                alert('Sistema de autenticação não carregado. Recarregue a página.');
-            }
-        }, 1000);
+    console.log('📝 Iniciando registro com email...');
+    
+    if (!window.authManager) {
+        showAuthError('Sistema de autenticação não carregado. Recarregue a página.');
+        return;
     }
+    
+    const name = document.getElementById('register-name').value;
+    const email = document.getElementById('register-email').value;
+    const password = document.getElementById('register-password').value;
+    const confirm = document.getElementById('register-confirm').value;
+    
+    // Validações
+    if (!name || !email || !password || !confirm) {
+        showAuthError('Por favor, preencha todos os campos.');
+        return;
+    }
+    
+    if (!isValidEmail(email)) {
+        showAuthError('Por favor, insira um email válido.');
+        return;
+    }
+    
+    if (password !== confirm) {
+        showAuthError('As senhas não coincidem.');
+        return;
+    }
+    
+    if (password.length < 6) {
+        showAuthError('A senha deve ter pelo menos 6 caracteres.');
+        return;
+    }
+    
+    window.authManager.registerWithEmail();
 }
 
 function handleGoogleLogin() {
-    if (window.authManager && window.authManager.loginWithGoogle) {
-        window.authManager.loginWithGoogle();
-    } else {
-        showGlobalLoading('Carregando sistema...');
-        setTimeout(() => {
-            if (window.authManager && window.authManager.loginWithGoogle) {
-                window.authManager.loginWithGoogle();
-            } else {
-                hideGlobalLoading();
-                alert('Sistema de autenticação não carregado. Recarregue a página.');
-            }
-        }, 1000);
+    console.log('🔗 Iniciando login com Google...');
+    
+    if (!window.authManager) {
+        showAuthError('Sistema de autenticação não carregado. Recarregue a página.');
+        return;
     }
+    
+    window.authManager.loginWithGoogle();
 }
 
 function handleResetPassword() {
-    if (window.authManager && window.authManager.resetPassword) {
-        window.authManager.resetPassword();
+    console.log('🔑 Solicitando redefinição de senha...');
+    
+    if (!window.authManager) {
+        showAuthError('Sistema de autenticação não carregado. Recarregue a página.');
+        return;
+    }
+    
+    // Tentar pegar email do formulário de login primeiro
+    const loginEmail = document.getElementById('login-email').value;
+    const registerEmail = document.getElementById('register-email').value;
+    
+    let email = loginEmail || registerEmail;
+    
+    if (!email) {
+        email = prompt('Digite seu e-mail para redefinir a senha:');
+        if (!email) {
+            showAuthError('Por favor, insira um email.');
+            return;
+        }
+    }
+    
+    if (!isValidEmail(email)) {
+        showAuthError('Por favor, insira um email válido.');
+        return;
+    }
+    
+    window.authManager.resetPassword();
+}
+
+// Funções utilitárias
+function isValidEmail(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+}
+
+function showAuthError(message) {
+    console.error('❌ Erro de autenticação:', message);
+    
+    // Usar sistema de mensagens do authManager se disponível
+    if (window.authManager && window.authManager.showMessage) {
+        window.authManager.showMessage(message, 'error');
     } else {
-        alert('Sistema de autenticação não carregado. Recarregue a página.');
+        // Fallback: alert simples
+        alert(message);
     }
 }
 
-// Expor funções globalmente
+// Expor funções globalmente para os onclick
 window.handleEmailLogin = handleEmailLogin;
 window.handleEmailRegister = handleEmailRegister;
 window.handleGoogleLogin = handleGoogleLogin;
 window.handleResetPassword = handleResetPassword;
+
+// Inicialização adicional quando o DOM estiver pronto
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🏠 Página inicial carregada e configurada');
+    
+    // Focar no primeiro campo do formulário ativo
+    setTimeout(() => {
+        const activeForm = document.querySelector('.auth-form:not(.hidden)');
+        if (activeForm) {
+            const firstInput = activeForm.querySelector('input[type="email"], input[type="text"]');
+            if (firstInput) {
+                firstInput.focus();
+            }
+        }
+    }, 500);
+});
 </script>
 
 <style>
-.separator {
+/* Estilos específicos para a página inicial */
+.action-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    color: #667eea;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: 0.9rem;
+    padding: 0;
+}
+
+.btn-link:hover {
+    color: #764ba2;
+}
+
+.form-options {
     text-align: center;
     margin: 1rem 0;
+}
+
+.separator {
+    text-align: center;
+    margin: 1.5rem 0;
     position: relative;
     color: #666;
 }
@@ -285,6 +504,133 @@ window.handleResetPassword = handleResetPassword;
     padding: 0 1rem;
     position: relative;
     z-index: 2;
+    font-size: 0.9rem;
+}
+
+.password-strength {
+    margin-top: 0.5rem;
+}
+
+.strength-bar {
+    height: 4px;
+    background: #ddd;
+    border-radius: 2px;
+    width: 0%;
+    transition: all 0.3s ease;
+}
+
+.strength-text {
+    font-size: 0.8rem;
+    color: #666;
+    display: block;
+    margin-top: 0.25rem;
+}
+
+.password-match {
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+    min-height: 1rem;
+}
+
+.benefits-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.benefits-list li {
+    padding: 0.25rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Melhorias responsivas */
+@media (max-width: 768px) {
+    .action-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .action-buttons .btn {
+        width: 100%;
+        max-width: 250px;
+    }
+    
+    .auth-card {
+        margin: 1rem 0;
+        padding: 1.5rem;
+    }
+    
+    .features {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .auth-card {
+        padding: 1rem;
+    }
+    
+    .hero-section h1 {
+        font-size: 2rem;
+    }
+    
+    .subtitle {
+        font-size: 1.1rem;
+    }
+}
+
+/* Animações suaves */
+.auth-form {
+    transition: all 0.3s ease;
+}
+
+.auth-tab {
+    transition: all 0.3s ease;
+}
+
+.auth-tab.active {
+    transform: translateY(-1px);
+}
+
+.btn {
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+/* Estados de loading */
+.btn.loading {
+    opacity: 0.7;
+    cursor: not-allowed;
+    position: relative;
+}
+
+.btn.loading::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border: 2px solid transparent;
+    border-top: 2px solid currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 .mobile-open {
@@ -297,6 +643,8 @@ window.handleResetPassword = handleResetPassword;
     background: var(--secondary-color);
     padding: 1rem;
     box-shadow: var(--shadow);
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
+    z-index: 1000;
 }
 </style>
 {% endblock %}

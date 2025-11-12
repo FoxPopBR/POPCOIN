@@ -25,6 +25,7 @@
             flex-direction: column;
             color: white;
             font-family: Arial, sans-serif;
+            backdrop-filter: blur(5px);
         }
         
         .global-loading-spinner {
@@ -40,6 +41,114 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+
+        /* Melhorias no menu mobile */
+        #auth-section.mobile-open {
+            display: flex !important;
+            flex-direction: column;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            border-radius: 0 0 var(--border-radius) var(--border-radius);
+            z-index: 1000;
+            gap: 1rem;
+        }
+
+        #auth-section.mobile-open .user-info,
+        #auth-section.mobile-open .login-section {
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        #auth-section.mobile-open .user-avatar {
+            width: 60px;
+            height: 60px;
+        }
+
+        #auth-section.mobile-open .user-name {
+            font-size: 1.1rem;
+        }
+
+        /* Melhorias no header */
+        .header-content {
+            position: relative;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .nav-link {
+            color: var(--white);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: var(--border-radius);
+            transition: var(--transition);
+            font-weight: 500;
+        }
+
+        .nav-link:hover {
+            background: rgba(255,255,255,0.1);
+            transform: translateY(-2px);
+        }
+
+        .nav-link.active {
+            background: rgba(255,255,255,0.2);
+            font-weight: bold;
+        }
+
+        /* Responsividade melhorada */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+            
+            .mobile-menu-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            .logo-section h1 {
+                font-size: 1.5rem;
+            }
+        }
+
+        @media (min-width: 769px) {
+            .mobile-menu-btn {
+                display: none;
+            }
+            
+            .nav-links {
+                display: flex;
+            }
+        }
+
+        /* Estados de loading melhorados */
+        .auth-loading {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 1rem;
+            background: rgba(255,255,255,0.1);
+            border-radius: var(--border-radius);
+        }
+
+        .loading-spinner {
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 2px solid var(--white);
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
         }
     </style>
 </head>
@@ -59,7 +168,20 @@
                         <h1>🎮 PopCoin IDLE</h1>
                     </div>
                     
-                    <button class="mobile-menu-btn" id="mobileMenuBtn">
+                    <!-- Links de Navegação -->
+                    <nav class="nav-links" id="nav-links">
+                        <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
+                            🏠 Início
+                        </a>
+                        <a href="{{ url_for('game') }}" class="nav-link {% if request.endpoint == 'game' %}active{% endif %}" id="game-link">
+                            🎮 Jogar
+                        </a>
+                        <a href="{{ url_for('profile') }}" class="nav-link {% if request.endpoint == 'profile' %}active{% endif %} hidden" id="profile-link">
+                            👤 Perfil
+                        </a>
+                    </nav>
+                    
+                    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Menu principal">
                         ☰
                     </button>
                     
@@ -71,15 +193,20 @@
                         </div>
                         
                         <!-- Usuário logado -->
-                        <div id="user-info" class="hidden">
-                            <img id="user-pic" src="" alt="Foto" class="user-avatar">
+                        <div id="user-info" class="hidden user-info">
+                            <img id="user-pic" src="" alt="Foto do usuário" class="user-avatar">
                             <span id="user-name" class="user-name"></span>
-                            <button id="logoutButton" class="btn-logout">🚪 Sair</button>
+                            <div class="user-actions">
+                                <a href="{{ url_for('profile') }}" class="btn-profile" id="header-profile-link">
+                                    👤 Perfil
+                                </a>
+                                <button id="logoutButton" class="btn-logout">🚪 Sair</button>
+                            </div>
                         </div>
                         
                         <!-- Login -->
-                        <div id="login-section" class="hidden">
-                            <button class="btn-login" onclick="window.loginWithGoogle && window.loginWithGoogle()">
+                        <div id="login-section" class="hidden login-section">
+                            <button class="btn-login" onclick="handleGlobalLogin()">
                                 🔑 Entrar
                             </button>
                         </div>
@@ -95,6 +222,12 @@
         <footer class="main-footer">
             <div class="container">
                 <p>PopCoin IDLE &copy; 2024 - Desenvolvido com ❤️ para jogadores ociosos</p>
+                <div class="footer-links">
+                    <a href="{{ url_for('index') }}">Início</a>
+                    <a href="{{ url_for('game') }}">Jogar</a>
+                    <a href="/privacy">Privacidade</a>
+                    <a href="/terms">Termos</a>
+                </div>
             </div>
         </footer>
     </div>
@@ -118,16 +251,29 @@
     {% block scripts %}{% endblock %}
 
     <script>
-        // Menu Mobile
+        // Menu Mobile e funcionalidades globais
         document.addEventListener('DOMContentLoaded', function() {
             const mobileMenuBtn = document.getElementById('mobileMenuBtn');
             const authSection = document.getElementById('auth-section');
+            const navLinks = document.getElementById('nav-links');
             
+            // Menu Mobile
             if (mobileMenuBtn && authSection) {
                 mobileMenuBtn.addEventListener('click', function() {
                     authSection.classList.toggle('mobile-open');
+                    navLinks.classList.toggle('mobile-open');
+                    this.classList.toggle('active');
                 });
             }
+
+            // Fechar menu ao clicar fora
+            document.addEventListener('click', function(event) {
+                if (!event.target.closest('#auth-section') && !event.target.closest('#mobileMenuBtn')) {
+                    authSection.classList.remove('mobile-open');
+                    navLinks.classList.remove('mobile-open');
+                    mobileMenuBtn.classList.remove('active');
+                }
+            });
 
             // Configuração global de loading
             window.showGlobalLoading = function(message = 'Processando...') {
@@ -144,7 +290,110 @@
                     overlay.style.display = 'none';
                 }
             };
+
+            // Atualizar navegação baseada no estado de autenticação
+            function updateNavigation(isAuthenticated) {
+                const profileLink = document.getElementById('profile-link');
+                const gameLink = document.getElementById('game-link');
+                const headerProfileLink = document.getElementById('header-profile-link');
+                
+                if (isAuthenticated) {
+                    if (profileLink) profileLink.classList.remove('hidden');
+                    if (headerProfileLink) headerProfileLink.style.display = 'block';
+                    if (gameLink) gameLink.style.display = 'block';
+                } else {
+                    if (profileLink) profileLink.classList.add('hidden');
+                    if (headerProfileLink) headerProfileLink.style.display = 'none';
+                    // Game link ainda visível, mas pode redirecionar para login
+                }
+            }
+
+            // Observar mudanças de autenticação
+            window.addEventListener('authStateChanged', function(event) {
+                updateNavigation(event.detail.isAuthenticated);
+            });
+
+            // Inicializar navegação
+            setTimeout(() => {
+                if (window.authManager) {
+                    updateNavigation(window.authManager.isAuthenticated);
+                }
+            }, 1000);
+
+            // Prevenir envio de formulários com Enter
+            document.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter' && event.target.tagName === 'INPUT') {
+                    const form = event.target.closest('form');
+                    if (form && !form.querySelector('button[type="submit"]')) {
+                        event.preventDefault();
+                    }
+                }
+            });
         });
+
+        // Função global de login
+        function handleGlobalLogin() {
+            if (window.authManager && window.authManager.loginWithGoogle) {
+                window.authManager.loginWithGoogle();
+            } else {
+                showGlobalLoading('Carregando...');
+                setTimeout(() => {
+                    if (window.authManager && window.authManager.loginWithGoogle) {
+                        window.authManager.loginWithGoogle();
+                    } else {
+                        hideGlobalLoading();
+                        alert('Sistema de autenticação não carregado. Recarregue a página.');
+                    }
+                }, 1000);
+            }
+        }
+
+        // Expor função globalmente
+        window.handleGlobalLogin = handleGlobalLogin;
+
+        // Web Vitals e métricas de performance
+        if ('visibilityState' in document) {
+            document.addEventListener('visibilitychange', function() {
+                if (document.visibilityState === 'hidden') {
+                    // Salvar estado quando a página for ocultada
+                    if (window.game && window.game.saveGameState) {
+                        window.game.saveGameState(true);
+                    }
+                }
+            });
+        }
+
+        // Tratamento de erros global
+        window.addEventListener('error', function(event) {
+            console.error('Erro global capturado:', event.error);
+            
+            // Não mostrar alertas para erros de rede ou recursos não críticos
+            if (event.error && !event.error.message.includes('Loading') && 
+                !event.error.message.includes('Network') &&
+                !event.error.message.includes('timeout')) {
+                
+                if (window.authManager && window.authManager.showMessage) {
+                    window.authManager.showMessage('Ocorreu um erro inesperado. A página será recarregada.', 'error');
+                }
+                
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
+            }
+        });
+
+        // Prevenir ações duplas
+        function preventMultipleActions(element, timeout = 1000) {
+            if (element.disabled) return false;
+            element.disabled = true;
+            setTimeout(() => {
+                element.disabled = false;
+            }, timeout);
+            return true;
+        }
+
+        // Expor utilitários globalmente
+        window.preventMultipleActions = preventMultipleActions;
     </script>
 </body>
 </html>
