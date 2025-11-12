@@ -1,4 +1,4 @@
-# database/db_models.py - VERSÃO CORRIGIDA E INTEGRADA
+# database/db_models.py - VERSÃO CORRIGIDA E OTIMIZADA
 import os
 import psycopg2
 import json
@@ -52,69 +52,98 @@ class DatabaseManager:
                 conn.close()
 
     def create_direct_connection(self):
-        """Cria conexão direta com PostgreSQL - CORREÇÃO SSL"""
+        """Cria conexão direta com PostgreSQL - CORREÇÃO SSL ROBUSTA"""
         database_url = os.environ.get('DATABASE_URL')
 
         if not database_url:
-            logger.error("❌ DATABASE_URL não encontrada")
+            logger.error("❌ DATABASE_URL não encontrada - Modo desenvolvimento")
             return None
 
         try:
             # Parse da URL para debugging seguro
             parsed_url = urllib.parse.urlparse(database_url)
             safe_url = f"{parsed_url.scheme}://{parsed_url.hostname}:{parsed_url.port}{parsed_url.path}"
-            logger.info(f"🔗 Conexão direta à: {safe_url}")
+            logger.info(f"🔗 Tentando conexão com: {safe_url}")
 
-            # CORREÇÃO SSL: Converter URL e adicionar parâmetros SSL
+            # CORREÇÃO: Converter postgres:// para postgresql://
             if database_url.startswith('postgres://'):
                 database_url = database_url.replace('postgres://', 'postgresql://')
 
-            # Adicionar parâmetros SSL para Render.com
-            if 'sslmode' not in database_url:
-                if '?' in database_url:
-                    database_url += '&sslmode=require'
-                else:
-                    database_url += '?sslmode=require'
+            # Tentar diferentes estratégias de conexão SSL
+            connection_attempts = [
+                # Tentativa 1: SSL requerido (modo padrão para Render)
+                {'sslmode': 'require', 'description': 'SSL requerido'},
+                # Tentativa 2: SSL preferido (mais tolerante)
+                {'sslmode': 'prefer', 'description': 'SSL preferido'},
+                # Tentativa 3: Sem SSL (apenas para debug)
+                {'sslmode': 'disable', 'description': 'Sem SSL'}
+            ]
 
-            logger.info(f"🔒 URL com SSL: {database_url.split('@')[0]}@[HOST]/[DB]")
+            for attempt in connection_attempts:
+                try:
+                    logger.info(f"🔒 Tentativa: {attempt['description']}")
+                    
+                    # Criar string de conexão com parâmetros SSL
+                    if '?' in database_url:
+                        attempt_url = f"{database_url}&sslmode={attempt['sslmode']}"
+                    else:
+                        attempt_url = f"{database_url}?sslmode={attempt['sslmode']}"
+                    
+                    conn = psycopg2.connect(
+                        dsn=attempt_url,
+                        connect_timeout=15,
+                        keepalives=1,
+                        keepalives_idle=30,
+                        keepalives_interval=10,
+                        keepalives_count=5,
+                    )
 
-            # Conexão com SSL
-            conn = psycopg2.connect(
-                dsn=database_url,
-                connect_timeout=15,  # Aumentado para 15s
-                keepalives=1,
-                keepalives_idle=30,
-                keepalives_interval=10,
-                keepalives_count=5,
-                sslmode='require'  # Forçar SSL
-            )
+                    # Testar a conexão
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT version();")
+                        result = cur.fetchone()
+                    
+                    logger.info(f"✅ {attempt['description']} - Conexão bem-sucedida!")
+                    logger.info(f"📊 PostgreSQL: {result[0].split(',')[0] if result else 'Unknown'}")
+                    return conn
 
-            # Testar a conexão
-            with conn.cursor() as cur:
-                cur.execute("SELECT version();")
-                result = cur.fetchone()
-                logger.info(f"✅ PostgreSQL version: {result[0].split(',')[0] if result else 'Unknown'}")
+                except Exception as e:
+                    logger.warning(f"⚠️ {attempt['description']} falhou: {str(e)[:100]}...")
+                    continue
 
-            logger.info("✅ Conexão direta PostgreSQL com SSL validada!")
-            return conn
+            logger.error("❌ Todas as tentativas de conexão falharam")
+            return None
 
         except Exception as e:
-            logger.error(f"❌ Erro na conexão direta: {e}")
+            logger.error(f"❌ Erro crítico na conexão: {e}")
             return None
 
     def init_db(self):
         """Inicializa o banco de dados e pool de conexões"""
         global connection_pool
         
+        # Evitar inicialização múltipla
+        if self.initialized:
+            return
+            
         logger.info("🔄 Iniciando inicialização do banco...")
         database_url = os.environ.get('DATABASE_URL')
         
         if not database_url:
             logger.error("❌ DATABASE_URL não encontrada - Modo desenvolvimento sem banco")
-            self.initialized = False
+            self.initialized = True  # Marcar como inicializado mesmo sem banco
             return
         
         try:
+            # Testar conexão primeiro
+            test_conn = self.create_direct_connection()
+            if not test_conn:
+                logger.error("❌ Não foi possível conectar ao banco - Modo desenvolvimento")
+                self.initialized = True
+                return
+                
+            test_conn.close()
+            
             # Criar pool de conexões
             with pool_lock:
                 connection_pool = pool.SimpleConnectionPool(
@@ -132,8 +161,8 @@ class DatabaseManager:
             self.initialized = True
             
         except Exception as e:
-            logger.error(f"❌ Erro na criação do pool: {e}")
-            # Continuar com conexões diretas
+            logger.error(f"❌ Erro na inicialização do banco: {e}")
+            # Marcar como inicializado mesmo com erro para permitir fallback
             self.initialized = True
 
     def create_tables(self):
@@ -652,49 +681,18 @@ def init_database_manager():
     except Exception as e:
         logger.error(f"❌ Falha ao inicializar DatabaseManager: {e}")
         return None
-    
+
+# ========== FUNÇÕES DE COMPATIBILIDADE (APENAS UMA VEZ) ==========
+
 def get_db_connection():
-    """Função de conveniência para compatibilidade com game_logic.py"""
+    """Função de compatibilidade para game_logic.py"""
     global db_manager
     if db_manager and db_manager.initialized:
         return db_manager.get_db_connection()
     return None
 
 def return_db_connection(conn):
-    """Função de conveniência para compatibilidade com game_logic.py"""
-    global db_manager
-    if db_manager and db_manager.initialized:
-        db_manager.return_db_connection(conn)
-
-def save_user_game_state(user_id: str, game_state: dict) -> bool:
-    """Função de conveniência para salvar estado do jogo"""
-    global db_manager
-    if db_manager and db_manager.initialized:
-        return db_manager.save_game_state(user_id, game_state)
-    return False
-
-def get_user_game_state(user_id: str) -> dict:
-    """Função de conveniência para obter estado do jogo"""
-    global db_manager
-    if db_manager and db_manager.initialized:
-        return db_manager.get_user_game_state(user_id)
-    return db_manager.get_default_game_state() if db_manager else {}
-
-def get_db_connection():
-    """
-    Função de compatibilidade para game_logic.py
-    Obtém uma conexão do pool de banco de dados
-    """
-    global db_manager
-    if db_manager and db_manager.initialized:
-        return db_manager.get_db_connection()
-    return None
-
-def return_db_connection(conn):
-    """
-    Função de compatibilidade para game_logic.py  
-    Retorna uma conexão ao pool
-    """
+    """Função de compatibilidade para game_logic.py"""
     global db_manager
     if db_manager and db_manager.initialized:
         db_manager.return_db_connection(conn)
@@ -721,6 +719,6 @@ def init_database():
         db_manager = init_database_manager()
     return db_manager
 
-# Inicializar quando o módulo for carregado
+# Inicializar quando o módulo for carregado (APENAS UMA VEZ)
 logger.info("📦 Inicializando db_models.py...")
 db_manager = init_database_manager()
