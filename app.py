@@ -309,10 +309,10 @@ def auth_logout():
         return jsonify({'success': True, 'message': 'Logout realizado'})
 
 @app.route('/api/auth/firebase-config')
-def get_firebase_config():
+def firebase_config_api():  # ❌ NOME ANTIGO: get_firebase_config
     """Fornecer configuração do Firebase para o frontend"""
     try:
-        config = get_firebase_config()
+        config = get_firebase_config()  # ✅ Agora chama a função global corretamente
         return jsonify(config)
     except Exception as e:
         logger.error(f"❌ Erro ao fornecer configuração Firebase: {e}")
