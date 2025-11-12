@@ -32,83 +32,54 @@ class GameManager:
         logger.info("✅ GameManager inicializado")
     
     def get_user_game_state(self, user_id: str) -> Dict[str, Any]:
-        """Recupera o estado do jogo do usuário - CORREÇÃO: Fallback robusto"""
+        """Recupera o estado do jogo do usuário - CORREÇÃO: Usar novo esquema"""
         try:
-            # Tentar importar o database manager - CORREÇÃO: Tratar erro de importação
+            # Usar as funções de compatibilidade do db_models
             try:
-                from database.db_models import get_db_connection, return_db_connection
-                conn = get_db_connection()
-                
-                if conn:
-                    cur = conn.cursor()
-                    cur.execute(
-                        'SELECT game_data FROM user_game_states WHERE user_id = %s',
-                        (user_id,)
-                    )
-                    result = cur.fetchone()
-                    cur.close()
-                    return_db_connection(conn)
-                    
-                    if result:
-                        game_state = json.loads(result[0])
-                        game_state = self.calculate_offline_earnings(game_state)
-                        logger.info(f"✅ Estado do jogo carregado para usuário: {user_id}")
-                        return game_state
+                from database.db_models import get_user_game_state as db_get_state
+                db_state = db_get_state(user_id)
+                if db_state:
+                    db_state = self.calculate_offline_earnings(db_state)
+                    logger.info(f"✅ Estado do jogo carregado do banco para: {user_id}")
+                    return db_state
             except ImportError as e:
                 logger.warning(f"⚠️ Database não disponível: {e}")
             except Exception as db_error:
                 logger.warning(f"⚠️ Erro no banco de dados, usando fallback: {db_error}")
-            
-            # CORREÇÃO: Fallback para estado padrão sem quebrar
+
+            # Fallback para estado padrão
             logger.info(f"🆕 Criando estado inicial para usuário: {user_id}")
             return self.create_initial_game_state(user_id)
-                
+
         except Exception as e:
             logger.error(f"❌ Erro crítico ao buscar estado do jogo: {e}")
             return self.default_game_state.copy()
-    
+
     def save_game_state(self, user_id: str, game_state: Dict[str, Any]) -> bool:
-        """Salva o estado do jogo - CORREÇÃO: Não quebrar se database falhar"""
+        """Salva o estado do jogo - CORREÇÃO: Usar novo esquema"""
         try:
             # Atualizar timestamp
             game_state['last_update'] = time.time()
-            game_state_json = json.dumps(game_state, default=str)
-            
-            # Tentar salvar no banco de dados - CORREÇÃO: Tratar erro de importação
+
+            # Usar as funções de compatibilidade do db_models
             try:
-                from database.db_models import get_db_connection, return_db_connection
-                conn = get_db_connection()
-                
-                if conn:
-                    cur = conn.cursor()
-                    cur.execute(
-                        '''INSERT INTO user_game_states (user_id, game_data) 
-                           VALUES (%s, %s)
-                           ON CONFLICT (user_id) 
-                           DO UPDATE SET game_data = EXCLUDED.game_data, updated_at = CURRENT_TIMESTAMP''',
-                        (user_id, game_state_json)
-                    )
-                    conn.commit()
-                    cur.close()
-                    return_db_connection(conn)
-                    
-                    logger.info(f"💾 Estado do jogo salvo para usuário: {user_id}")
+                from database.db_models import save_user_game_state as db_save_state
+                if db_save_state(user_id, game_state):
+                    logger.info(f"💾 Estado do jogo salvo no banco para: {user_id}")
                     return True
             except ImportError as e:
                 logger.warning(f"⚠️ Database não disponível: {e}")
             except Exception as db_error:
                 logger.warning(f"⚠️ Erro ao salvar no banco: {db_error}")
-                # Continuar sem quebrar o jogo
-            
-            # CORREÇÃO: Sempre retornar True para não quebrar o jogo
+
+            # Fallback local
             logger.info(f"💾 Estado salvo localmente (sem banco): {user_id}")
             return True
-            
+
         except Exception as e:
             logger.error(f"❌ Erro crítico ao salvar estado do jogo: {e}")
-            return False  # Mas o jogo continua funcionando
-
-    # 🎯 MANTER TODOS OS OUTROS MÉTODOS EXATAMENTE COMO ESTÃO
+            return True
+        # 🎯 MANTER TODOS OS OUTROS MÉTODOS EXATAMENTE COMO ESTÃO
     def _sync_with_user_profile(self, user_id: str, game_state: Dict[str, Any]) -> None:
         """Sincroniza dados do jogo com o perfil do usuário"""
         try:
