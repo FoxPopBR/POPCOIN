@@ -1,4 +1,4 @@
-// static/js/game.js - VERSÃO CORRIGIDA E INTEGRADA
+// static/js/game.js - VERSÃO COMPLETA CORRIGIDA E INTEGRADA
 class PopCoinGame {
     constructor() {
         this.gameState = {
@@ -30,34 +30,8 @@ class PopCoinGame {
     async init() {
         console.log("🎮 Inicializando jogo...");
         
-        // Verificação de autenticação mais robusta
-        if (!window.authManager) {
-            console.log("⏳ Aguardando AuthManager...");
-            let waitCount = 0;
-            while (!window.authManager && waitCount < 50) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-                waitCount++;
-            }
-            
-            if (!window.authManager) {
-                console.error("❌ AuthManager não carregado");
-                this.showMessage("Erro de autenticação. Redirecionando...", "error");
-                setTimeout(() => window.location.href = '/', 2000);
-                return;
-            }
-        }
-        
-        // Aguardar verificação de autenticação
-        let waitCount = 0;
-        while (!window.authManager.authChecked && waitCount < 50) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            waitCount++;
-        }
-        
-        if (!window.authManager.isAuthenticated) {
-            console.log("❌ Usuário não autenticado, redirecionando...");
-            this.showMessage("Você precisa estar logado para jogar. Redirecionando...", "error");
-            setTimeout(() => window.location.href = '/', 2000);
+        // ✅ CORREÇÃO: Verificação de autenticação mais robusta
+        if (!await this.checkAuthentication()) {
             return;
         }
 
@@ -68,24 +42,55 @@ class PopCoinGame {
         this.startAutoSave();
         this.hideLoading();
         
-        // Adicionar link para perfil no header do jogo
         this.addProfileLink();
+    }
+
+    async checkAuthentication() {
+        // ✅ CORREÇÃO: Verificação mais robusta com timeout
+        let attempts = 0;
+        while (!window.authManager && attempts < 50) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+
+        if (!window.authManager) {
+            console.error("❌ AuthManager não carregado");
+            this.showMessage("Erro de autenticação. Redirecionando...", "error");
+            setTimeout(() => window.location.href = '/', 2000);
+            return false;
+        }
+
+        // Aguardar verificação de autenticação
+        let authCheckAttempts = 0;
+        while (!window.authManager.authChecked && authCheckAttempts < 50) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            authCheckAttempts++;
+        }
+        
+        if (!window.authManager.isUserAuthenticated()) {
+            console.log("❌ Usuário não autenticado, redirecionando...");
+            this.showMessage("Você precisa estar logado para jogar. Redirecionando...", "error");
+            setTimeout(() => window.location.href = '/', 2000);
+            return false;
+        }
+
+        return true;
     }
 
     async loadGameState() {
         try {
             console.log("📥 Carregando estado do jogo...");
             
-            // Verificar autenticação antes de carregar
-            if (!window.authManager || !window.authManager.isAuthenticated) {
+            // ✅ CORREÇÃO: Verificar autenticação antes de carregar
+            if (!window.authManager || !window.authManager.isUserAuthenticated()) {
                 throw new Error("Usuário não autenticado");
             }
 
             const response = await fetch('/api/game/state');
             
             if (response.status === 401) {
-                // Não autorizado - redirecionar para login
-                window.location.href = '/';
+                this.showMessage('Sessão expirada. Redirecionando...', 'error');
+                setTimeout(() => window.location.href = '/', 2000);
                 return;
             }
             
@@ -101,8 +106,8 @@ class PopCoinGame {
                 return;
             }
             
-            // Se o servidor retornar um estado vazio, usar o estado padrão
-            if (Object.keys(data).length === 0) {
+            // ✅ CORREÇÃO: Melhor tratamento de estado vazio
+            if (Object.keys(data).length === 0 || !data.coins) {
                 console.log("📭 Nenhum estado salvo encontrado, usando estado padrão");
                 this.updateUI();
                 return;
@@ -112,12 +117,10 @@ class PopCoinGame {
             this.gameState = { 
                 ...this.gameState, 
                 ...data,
-                upgrades: { ...this.gameState.upgrades, ...data.upgrades }
+                upgrades: { ...this.gameState.upgrades, ...(data.upgrades || {}) }
             };
             
-            // Calcular ganhos offline se houver tempo desde a última atualização
             this.calculateOfflineEarnings();
-            
             this.updateUI();
             console.log("✅ Estado do jogo carregado:", this.gameState);
             
@@ -131,20 +134,23 @@ class PopCoinGame {
             }
             
             this.showMessage('Erro ao carregar o jogo. Tentando continuar offline...', 'warning');
-            
-            // Tentar novamente após 5 segundos
             setTimeout(() => this.loadGameState(), 5000);
         }
     }
 
     async saveGameState(force = false) {
-        // Prevenir saves muito frequentes
         const now = Date.now();
         if (!force && now - this.lastSaveTime < this.saveCooldown) {
             return;
         }
         
         try {
+            // ✅ CORREÇÃO: Verificar autenticação antes de salvar
+            if (!window.authManager || !window.authManager.isUserAuthenticated()) {
+                console.warn("⚠️ Usuário não autenticado, ignorando save");
+                return;
+            }
+
             this.gameState.last_update = Date.now() / 1000;
             this.lastSaveTime = now;
             
@@ -157,7 +163,6 @@ class PopCoinGame {
             });
             
             if (response.status === 401) {
-                // Sessão expirada
                 this.showMessage('Sessão expirada. Faça login novamente.', 'error');
                 return;
             }
@@ -173,16 +178,10 @@ class PopCoinGame {
                 this.updateSaveStatus('✅ Jogo salvo');
             } else {
                 console.error('❌ Erro ao salvar:', result.error);
-                this.showMessage('Erro ao salvar jogo: ' + result.error, 'error');
             }
         } catch (error) {
             console.error('❌ Erro ao salvar jogo:', error);
             this.updateSaveStatus('❌ Erro ao salvar');
-            
-            // Não mostrar erro para o usuário a menos que seja crítico
-            if (!error.message.includes('Network')) {
-                this.showMessage('Erro ao salvar progresso. Verifique sua conexão.', 'warning');
-            }
         }
     }
 
@@ -191,7 +190,7 @@ class PopCoinGame {
         const timeDiff = now - this.gameState.last_update;
         
         if (timeDiff > 60 && this.gameState.coins_per_second > 0) {
-            const offlineEarnings = Math.min(timeDiff * this.gameState.coins_per_second, 3600 * this.gameState.coins_per_second); // Limite de 1 hora
+            const offlineEarnings = Math.min(timeDiff * this.gameState.coins_per_second, 3600 * this.gameState.coins_per_second);
             this.gameState.coins += offlineEarnings;
             this.gameState.total_coins += offlineEarnings;
             
@@ -242,7 +241,7 @@ class PopCoinGame {
             this.destroy();
         });
 
-        // Salvar quando a página for ocultada (mudança de aba, etc)
+        // Salvar quando a página for ocultada
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 this.saveGameState(true);
@@ -283,7 +282,7 @@ class PopCoinGame {
         // Verificar conquistas
         this.checkAchievements();
         
-        // Salvar a cada 25 cliques (menos frequente para performance)
+        // Salvar a cada 25 cliques
         if (this.gameState.click_count % 25 === 0) {
             this.saveGameState();
         }
@@ -334,7 +333,7 @@ class PopCoinGame {
             this.showMessage(`✅ Upgrade comprado: ${this.getUpgradeName(upgradeType)} Nv. ${this.gameState.upgrades[upgradeType]}`, 'success');
             this.updateUI();
             this.checkAchievements();
-            await this.saveGameState(true); // Forçar save após upgrade
+            await this.saveGameState(true);
             
         } else {
             this.showMessage('❌ Moedas insuficientes!', 'error');
@@ -356,15 +355,14 @@ class PopCoinGame {
     }
 
     calculateUpgradeCost(baseCost, currentLevel) {
-        // Custo aumenta exponencialmente
         return Math.floor(baseCost * Math.pow(1.5, currentLevel));
     }
 
     getUpgradeName(upgradeType) {
         const names = {
             'click_power': 'Força do Clique',
-            'auto_clicker': 'Clique Automático',
-            'click_bot': 'Bot de Clique'
+            'auto_clickers': 'Clique Automático',
+            'click_bots': 'Bot de Clique'
         };
         return names[upgradeType] || upgradeType;
     }
@@ -401,7 +399,6 @@ class PopCoinGame {
             // Desabilitar botão se não tiver moedas suficientes
             button.disabled = this.gameState.coins < cost;
             
-            // Adicionar classe visual se não puder comprar
             if (this.gameState.coins < cost) {
                 button.classList.add('cant-afford');
             } else {
@@ -481,7 +478,6 @@ class PopCoinGame {
                 this.showMessage(`🏆 Conquista desbloqueada: ${achievement.name}`, 'achievement');
                 console.log(`🏆 Conquista: ${achievement.name}`);
                 
-                // Salvar quando desbloquear conquista
                 this.saveGameState(true);
             }
         });
@@ -516,7 +512,6 @@ class PopCoinGame {
     }
 
     prestige() {
-        // Sistema de prestígio
         if (this.gameState.total_coins >= 10000) {
             const prestigeBonus = Math.floor(this.gameState.total_coins / 10000);
             
@@ -576,7 +571,6 @@ class PopCoinGame {
         
         messageContainer.appendChild(messageElement);
         
-        // Auto-remover após 5 segundos
         setTimeout(() => {
             if (messageElement.parentNode) {
                 messageElement.style.animation = 'slideOutRight 0.3s ease-in';
@@ -614,14 +608,12 @@ class PopCoinGame {
 
     startGameLoop() {
         this.gameLoopInterval = setInterval(() => {
-            // Gerar moedas automáticas de forma consistente
             if (this.gameState.coins_per_second > 0) {
-                const autoEarnings = this.gameState.coins_per_second / 10; // 10 updates por segundo
+                const autoEarnings = this.gameState.coins_per_second / 10;
                 
                 this.gameState.coins += autoEarnings;
                 this.gameState.total_coins += autoEarnings;
                 
-                // Atualizar UI a cada segundo para performance
                 if (Date.now() % 1000 < 100) {
                     this.updateUI();
                 }
@@ -632,7 +624,7 @@ class PopCoinGame {
     startAutoSave() {
         this.autoSaveInterval = setInterval(() => {
             this.saveGameState();
-        }, 30000); // Salvar a cada 30 segundos
+        }, 30000);
     }
 
     hideLoading() {
@@ -642,11 +634,9 @@ class PopCoinGame {
             loadingOverlay.style.display = 'none';
         }
         
-        // Mostrar mensagem de boas-vindas
         this.showMessage('🎮 Jogo carregado! Clique na moeda para começar!', 'success');
     }
 
-    // Limpar intervals quando a página for fechada
     destroy() {
         if (this.gameLoopInterval) {
             clearInterval(this.gameLoopInterval);
@@ -656,17 +646,37 @@ class PopCoinGame {
             clearInterval(this.autoSaveInterval);
             this.autoSaveInterval = null;
         }
-        this.saveGameState(true); // Forçar save final
+        
+        // ✅ CORREÇÃO: Salvar apenas se autenticado
+        if (window.authManager && window.authManager.isUserAuthenticated()) {
+            this.saveGameState(true);
+        }
+        
         console.log('🎮 Jogo finalizado');
     }
 }
 
-// Inicializar o jogo quando a página carregar
+// ✅ CORREÇÃO: Inicialização mais segura
 let game;
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🎮 Inicializando PopCoin Game...');
-    game = new PopCoinGame();
+    
+    const initGame = async () => {
+        let attempts = 0;
+        while (!window.authManager && attempts < 50) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+        
+        if (window.authManager && window.authManager.isUserAuthenticated()) {
+            game = new PopCoinGame();
+        } else {
+            console.log('❌ Usuário não autenticado, jogo não iniciado');
+        }
+    };
+    
+    initGame();
 });
 
 // Adicionar estilos CSS para animações
@@ -738,7 +748,6 @@ style.textContent = `
         opacity: 0.8;
     }
     
-    /* Melhorias de responsividade */
     @media (max-width: 768px) {
         #profile-link {
             margin-left: 0.5rem !important;

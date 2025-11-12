@@ -9,11 +9,11 @@
             <div class="game-title">
                 <h1>👤 Meu Perfil</h1>
                 <div class="profile-actions">
-                    <!-- ✅ CORREÇÃO: Link para o jogo mantido (agora do perfil para jogo está correto) -->
-                    <a href="{{ url_for('game') }}" class="btn btn-secondary">
-                        🎮 Voltar ao Jogo
-                    </a>
-                    <button class="btn btn-primary" onclick="window.location.reload()">
+                    <!-- ✅ CORREÇÃO: Botão PRINCIPAL "Jogar" em destaque -->
+                    <button id="play-button" class="btn btn-primary btn-large" onclick="redirectToGame()">
+                        🎮 Jogar Agora
+                    </button>
+                    <button class="btn btn-secondary" onclick="window.profileManager?.loadProfile()">
                         🔄 Atualizar
                     </button>
                 </div>
@@ -31,11 +31,10 @@
                     <div class="profile-info">
                         <div class="profile-avatar-section">
                             <div class="profile-avatar">
-                                <img id="profile-avatar-img" src="" alt="Avatar" class="user-avatar large">
+                                <!-- ✅ CORREÇÃO: Avatar com fallback para imagem padrão -->
+                                <img id="profile-avatar-img" src="/static/images/default-avatar.png" alt="Avatar" class="user-avatar large">
                                 <div class="avatar-actions">
-                                    <button class="btn btn-secondary btn-small" onclick="changeAvatar()">
-                                        📷 Alterar Avatar
-                                    </button>
+                                    <span class="avatar-status" id="avatar-status">Foto do Google</span>
                                 </div>
                             </div>
                         </div>
@@ -211,8 +210,8 @@
                         <button class="btn btn-danger" onclick="exportData()">
                             📤 Exportar Dados
                         </button>
-                        <button class="btn btn-danger btn-outline" onclick="deleteAccount()">
-                            🗑️ Excluir Conta
+                        <button class="btn btn-danger btn-outline" onclick="logout()">
+                            🚪 Sair
                         </button>
                     </div>
                     
@@ -239,7 +238,7 @@
     </div>
 </div>
 
-<!-- ✅ CORREÇÃO: Adicionado loading overlay específico para o perfil -->
+<!-- Loading overlay específico para o perfil -->
 <div id="profile-loading-overlay" class="loading-overlay" style="display: none;">
     <div class="loading-content">
         <div class="loading-spinner"></div>
@@ -261,7 +260,6 @@ class ProfileManager {
     async init() {
         console.log('👤 Inicializando ProfileManager...');
         
-        // ✅ CORREÇÃO: Verificação mais robusta de autenticação
         if (!await this.checkAuthentication()) {
             return;
         }
@@ -272,14 +270,14 @@ class ProfileManager {
     }
 
     async checkAuthentication() {
-        // ✅ CORREÇÃO: Verificação mais robusta com timeout
+        // ✅ CORREÇÃO: Verificação mais robusta
         let attempts = 0;
         while (!window.authManager && attempts < 30) {
             await new Promise(resolve => setTimeout(resolve, 100));
             attempts++;
         }
 
-        if (!window.authManager || !window.authManager.isAuthenticated) {
+        if (!window.authManager || !window.authManager.isUserAuthenticated()) {
             this.showMessage('Você precisa estar logado para acessar esta página', 'error');
             setTimeout(() => window.location.href = '/', 2000);
             return false;
@@ -293,7 +291,8 @@ class ProfileManager {
             console.log('📥 Carregando perfil do usuário...');
             this.showProfileLoading(true);
 
-            const token = await window.authManager.getAuthToken();
+            // ✅ CORREÇÃO: Usar authManager para obter token
+            const token = await window.authManager.refreshToken();
             if (!token) {
                 throw new Error('Token de autenticação não disponível');
             }
@@ -305,7 +304,6 @@ class ProfileManager {
             });
 
             if (response.status === 401) {
-                // ✅ CORREÇÃO: Sessão expirada - redirecionar
                 this.showMessage('Sessão expirada. Redirecionando...', 'error');
                 setTimeout(() => window.location.href = '/', 2000);
                 return;
@@ -361,12 +359,17 @@ class ProfileManager {
             document.getElementById('profile-created').value = createdDate;
         }
 
-        // Avatar
+        // ✅ CORREÇÃO: Avatar com fallback correto
         const avatarImg = document.getElementById('profile-avatar-img');
-        if (this.userProfile.picture) {
+        const avatarStatus = document.getElementById('avatar-status');
+        if (this.userProfile.picture && this.userProfile.picture !== '/static/images/default-avatar.png') {
             avatarImg.src = this.userProfile.picture;
+            avatarStatus.textContent = 'Foto do Google';
+            avatarStatus.style.color = '#28a745';
         } else {
             avatarImg.src = '/static/images/default-avatar.png';
+            avatarStatus.textContent = 'Foto Padrão';
+            avatarStatus.style.color = '#6c757d';
         }
 
         // Estatísticas do jogo
@@ -470,7 +473,7 @@ class ProfileManager {
         try {
             this.showProfileLoading(true);
             
-            const token = await window.authManager.getAuthToken();
+            const token = await window.authManager.refreshToken();
             if (!token) {
                 this.showMessage('Erro de autenticação', 'error');
                 return;
@@ -507,6 +510,12 @@ class ProfileManager {
                     this.showMessage('Perfil atualizado com sucesso!', 'success');
                     this.userProfile = result.profile;
                     this.originalData = JSON.parse(JSON.stringify(this.userProfile));
+                    
+                    // ✅ CORREÇÃO: Atualizar também no authManager
+                    if (window.authManager && window.authManager.user) {
+                        window.authManager.user.name = updates.name;
+                        window.authManager.updateUI(window.authManager.user);
+                    }
                 } else {
                     throw new Error(result.error || 'Erro ao atualizar perfil');
                 }
@@ -531,18 +540,6 @@ class ProfileManager {
                 }
             });
         }
-
-        // Detectar mudanças nos formulários
-        const inputs = document.querySelectorAll('.profile-input, input[type="checkbox"]');
-        inputs.forEach(input => {
-            input.addEventListener('change', () => {
-                this.checkForChanges();
-            });
-        });
-    }
-
-    checkForChanges() {
-        // Implementar detecção de mudanças se necessário
     }
 
     startAutoRefresh() {
@@ -564,13 +561,13 @@ class ProfileManager {
     }
 
     showMessage(message, type = 'info') {
-        // Usar o sistema de mensagens do authManager se disponível
+        // Usar o sistema de mensagens do authManager
         if (window.authManager && window.authManager.showMessage) {
             window.authManager.showMessage(message, type);
             return;
         }
         
-        // Fallback: sistema próprio de mensagens
+        // Fallback
         const messageDiv = document.getElementById('profile-messages');
         if (!messageDiv) return;
         
@@ -602,6 +599,22 @@ class ProfileManager {
     }
 }
 
+// ✅ CORREÇÃO: Função para redirecionar para o jogo
+function redirectToGame() {
+    if (window.authManager) {
+        window.authManager.redirectToGame();
+    } else {
+        window.location.href = '/game';
+    }
+}
+
+// ✅ CORREÇÃO: Função logout integrada
+function logout() {
+    if (window.authManager) {
+        window.authManager.logout();
+    }
+}
+
 // Funções globais
 function updateProfile() {
     if (window.profileManager) {
@@ -627,10 +640,6 @@ function resetPreferences() {
     }
 }
 
-function changeAvatar() {
-    alert('Funcionalidade de upload de avatar em desenvolvimento!');
-}
-
 function changePassword() {
     alert('Redirecionando para redefinição de senha...');
     if (window.authManager) {
@@ -651,19 +660,10 @@ function exportData() {
     }
 }
 
-function deleteAccount() {
-    if (confirm('⚠️ ATENÇÃO: Esta ação é irreversível! Tem certeza que deseja excluir sua conta e todos os dados?')) {
-        if (confirm('❌ TODOS os seus dados serão perdidos permanentemente. Confirmar exclusão?')) {
-            alert('Funcionalidade de exclusão de conta em desenvolvimento.');
-        }
-    }
-}
-
-// ✅ CORREÇÃO: Inicialização melhorada com verificação de autenticação
+// ✅ CORREÇÃO: Inicialização melhorada
 document.addEventListener('DOMContentLoaded', function() {
     console.log('👤 Inicializando página de perfil...');
     
-    // Aguardar o authManager estar disponível
     const initProfileManager = async () => {
         let attempts = 0;
         while (!window.authManager && attempts < 50) {
@@ -671,11 +671,10 @@ document.addEventListener('DOMContentLoaded', function() {
             attempts++;
         }
         
-        if (window.authManager && window.authManager.isAuthenticated) {
+        if (window.authManager && window.authManager.isUserAuthenticated()) {
             window.profileManager = new ProfileManager();
         } else {
             console.log('❌ Usuário não autenticado, redirecionando...');
-            // Mostrar mensagem e redirecionar
             const messageDiv = document.getElementById('profile-messages');
             if (messageDiv) {
                 messageDiv.innerHTML = `
@@ -739,10 +738,12 @@ document.addEventListener('DOMContentLoaded', function() {
     object-fit: cover;
 }
 
-.avatar-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+.avatar-status {
+    display: block;
+    font-size: 0.8rem;
+    color: #28a745;
+    margin-top: 0.5rem;
+    font-weight: bold;
 }
 
 .profile-details {
@@ -783,6 +784,13 @@ document.addEventListener('DOMContentLoaded', function() {
     display: flex;
     gap: 1rem;
     justify-content: center;
+}
+
+/* ✅ CORREÇÃO: Botão Jogar em destaque */
+.btn-large {
+    padding: 1rem 2rem;
+    font-size: 1.2rem;
+    font-weight: bold;
 }
 
 .game-stats-grid {
