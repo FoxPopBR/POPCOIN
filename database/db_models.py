@@ -52,46 +52,52 @@ class DatabaseManager:
                 conn.close()
 
     def create_direct_connection(self):
-        """Cria conexão direta com PostgreSQL"""
+        """Cria conexão direta com PostgreSQL - CORREÇÃO SSL"""
         database_url = os.environ.get('DATABASE_URL')
-        
+
         if not database_url:
             logger.error("❌ DATABASE_URL não encontrada")
             return None
-        
+
         try:
             # Parse da URL para debugging seguro
             parsed_url = urllib.parse.urlparse(database_url)
             safe_url = f"{parsed_url.scheme}://{parsed_url.hostname}:{parsed_url.port}{parsed_url.path}"
             logger.info(f"🔗 Conexão direta à: {safe_url}")
-            
-            # Converter URL se necessário (Render.com usa postgres://)
+
+            # CORREÇÃO SSL: Converter URL e adicionar parâmetros SSL
             if database_url.startswith('postgres://'):
                 database_url = database_url.replace('postgres://', 'postgresql://')
-            
-            # Conexão com timeout
+
+            # Adicionar parâmetros SSL para Render.com
+            if 'sslmode' not in database_url:
+                if '?' in database_url:
+                    database_url += '&sslmode=require'
+                else:
+                    database_url += '?sslmode=require'
+
+            logger.info(f"🔒 URL com SSL: {database_url.split('@')[0]}@[HOST]/[DB]")
+
+            # Conexão com SSL
             conn = psycopg2.connect(
                 dsn=database_url,
-                connect_timeout=10,
+                connect_timeout=15,  # Aumentado para 15s
                 keepalives=1,
                 keepalives_idle=30,
                 keepalives_interval=10,
-                keepalives_count=5
+                keepalives_count=5,
+                sslmode='require'  # Forçar SSL
             )
-            
+
             # Testar a conexão
             with conn.cursor() as cur:
-                cur.execute("SELECT 1 as test;")
+                cur.execute("SELECT version();")
                 result = cur.fetchone()
-            
-            if result and result[0] == 1:
-                logger.info("✅ Conexão direta PostgreSQL validada!")
-                return conn
-            else:
-                logger.error("❌ Teste de conexão direta falhou")
-                conn.close()
-                return None
-                
+                logger.info(f"✅ PostgreSQL version: {result[0].split(',')[0] if result else 'Unknown'}")
+
+            logger.info("✅ Conexão direta PostgreSQL com SSL validada!")
+            return conn
+
         except Exception as e:
             logger.error(f"❌ Erro na conexão direta: {e}")
             return None
@@ -646,6 +652,74 @@ def init_database_manager():
     except Exception as e:
         logger.error(f"❌ Falha ao inicializar DatabaseManager: {e}")
         return None
+    
+def get_db_connection():
+    """Função de conveniência para compatibilidade com game_logic.py"""
+    global db_manager
+    if db_manager and db_manager.initialized:
+        return db_manager.get_db_connection()
+    return None
+
+def return_db_connection(conn):
+    """Função de conveniência para compatibilidade com game_logic.py"""
+    global db_manager
+    if db_manager and db_manager.initialized:
+        db_manager.return_db_connection(conn)
+
+def save_user_game_state(user_id: str, game_state: dict) -> bool:
+    """Função de conveniência para salvar estado do jogo"""
+    global db_manager
+    if db_manager and db_manager.initialized:
+        return db_manager.save_game_state(user_id, game_state)
+    return False
+
+def get_user_game_state(user_id: str) -> dict:
+    """Função de conveniência para obter estado do jogo"""
+    global db_manager
+    if db_manager and db_manager.initialized:
+        return db_manager.get_user_game_state(user_id)
+    return db_manager.get_default_game_state() if db_manager else {}
+
+def get_db_connection():
+    """
+    Função de compatibilidade para game_logic.py
+    Obtém uma conexão do pool de banco de dados
+    """
+    global db_manager
+    if db_manager and db_manager.initialized:
+        return db_manager.get_db_connection()
+    return None
+
+def return_db_connection(conn):
+    """
+    Função de compatibilidade para game_logic.py  
+    Retorna uma conexão ao pool
+    """
+    global db_manager
+    if db_manager and db_manager.initialized:
+        db_manager.return_db_connection(conn)
+
+def save_user_game_state(user_id: str, game_state: dict) -> bool:
+    """Função de conveniência para salvar estado do jogo"""
+    global db_manager
+    if db_manager and db_manager.initialized:
+        return db_manager.save_game_state(user_id, game_state)
+    return False
+
+def get_user_game_state(user_id: str) -> dict:
+    """Função de conveniência para obter estado do jogo"""
+    global db_manager
+    if db_manager and db_manager.initialized:
+        return db_manager.get_user_game_state(user_id)
+    return db_manager.get_default_game_state() if db_manager else {}
+
+def init_database():
+    """Função de compatibilidade para inicialização"""
+    global db_manager
+    if not db_manager:
+        from database.db_models import init_database_manager
+        db_manager = init_database_manager()
+    return db_manager
 
 # Inicializar quando o módulo for carregado
 logger.info("📦 Inicializando db_models.py...")
