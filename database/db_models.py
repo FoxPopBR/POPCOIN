@@ -1,7 +1,8 @@
+# database/db_models.py - VERSÃO CORRIGIDA E OTIMIZADA
 import os
 import psycopg2
 import json
-from psycopg2.extras import DictCursor
+from psycopg2.extras import DictCursor, RealDictCursor
 import urllib.parse
 from psycopg2 import pool
 import threading
@@ -12,33 +13,44 @@ from typing import Optional, Dict, Any, List
 # Configurar logging
 logger = logging.getLogger(__name__)
 
-# ✅ CORREÇÃO: Pool de conexões simplificado
+# ✅ CORREÇÃO: Pool de conexões thread-safe
 connection_pool = None
 pool_lock = threading.Lock()
 
 class DatabaseManager:
-    """Gerenciador de banco de dados para o PopCoin IDLE - VERSÃO SIMPLIFICADA"""
+    """Gerenciador de banco de dados para o PopCoin IDLE - VERSÃO CORRIGIDA"""
     
     def __init__(self):
         self.initialized = False
-        # ✅ CORREÇÃO: Usar DATABASE_URL do Render.com (já configurada nas variáveis de ambiente)
         self.database_url = os.environ.get('DATABASE_URL')
+        self.pool_min = 1
+        self.pool_max = 10
         self.init_db()
     
     def get_db_connection(self):
-        """✅ CORREÇÃO: Obtém conexão SEM timeout (psycopg2 não suporta)"""
+        """✅ CORREÇÃO: Obtém conexão de forma segura"""
         global connection_pool
         
+        if not self.initialized or not connection_pool:
+            return self.create_direct_connection()
+        
         try:
-            if connection_pool:
-                # ✅ CORREÇÃO: Removido timeout - não é suportado pelo psycopg2
-                conn = connection_pool.getconn()
-                if conn and not conn.closed:
+            conn = connection_pool.getconn()
+            if conn and not conn.closed:
+                # ✅ CORREÇÃO: Verificar se a conexão ainda é válida
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute('SELECT 1')
                     return conn
+                except psycopg2.InterfaceError:
+                    # Conexão inválida, criar nova
+                    connection_pool.putconn(conn, close=True)
+                    return self.create_direct_connection()
+            else:
+                return self.create_direct_connection()
         except Exception as e:
             logger.warning(f"⚠️ Erro ao obter conexão do pool: {e}")
-        
-        return self.create_direct_connection()
+            return self.create_direct_connection()
 
     def return_db_connection(self, conn):
         """✅ CORREÇÃO: Retorna conexão de forma segura"""
@@ -46,47 +58,49 @@ class DatabaseManager:
         try:
             if connection_pool and conn and not conn.closed:
                 connection_pool.putconn(conn)
+            elif conn:
+                conn.close()
         except Exception as e:
             logger.warning(f"⚠️ Erro ao retornar conexão: {e}")
             if conn:
                 conn.close()
 
     def create_direct_connection(self):
-        """✅ CORREÇÃO: Conexão direta otimizada"""
+        """✅ CORREÇÃO: Conexão direta com tratamento de erro melhorado"""
         if not self.database_url:
             logger.error("❌ DATABASE_URL não encontrada")
             return None
 
         try:
-            # ✅ CORREÇÃO: Usar a DATABASE_URL do Render diretamente
+            # ✅ CORREÇÃO: Converter postgres:// para postgresql://
             database_url = self.database_url
-            
-            # Converter postgres:// para postgresql:// se necessário
             if database_url.startswith('postgres://'):
                 database_url = database_url.replace('postgres://', 'postgresql://')
 
-            logger.info(f"🔗 Conectando ao banco: {database_url.split('@')[1] if '@' in database_url else 'Unknown'}")
+            logger.info(f"🔗 Tentando conexão direta com o banco...")
 
             conn = psycopg2.connect(
                 dsn=database_url,
-                sslmode='require'  # Render requer SSL
+                sslmode='require',
+                connect_timeout=10
             )
 
             # Testar conexão
             with conn.cursor() as cur:
-                cur.execute("SELECT current_database();")
+                cur.execute("SELECT current_database(), current_user;")
                 result = cur.fetchone()
                 db_name = result[0] if result else 'Unknown'
+                db_user = result[1] if result else 'Unknown'
                 
-            logger.info(f"✅ Conectado ao banco: {db_name}")
+            logger.info(f"✅ Conectado ao banco: {db_name} como {db_user}")
             return conn
 
         except Exception as e:
-            logger.error(f"❌ Erro na conexão com o banco: {e}")
+            logger.error(f"❌ Erro na conexão direta com o banco: {e}")
             return None
 
     def init_db(self):
-        """✅ CORREÇÃO: Inicialização simplificada"""
+        """✅ CORREÇÃO: Inicialização robusta com fallbacks"""
         global connection_pool
         
         if self.initialized:
@@ -95,32 +109,34 @@ class DatabaseManager:
         logger.info("🔄 Iniciando inicialização do banco...")
         
         if not self.database_url:
-            logger.error("❌ DATABASE_URL não encontrada - Modo desenvolvimento")
-            self.initialized = True
+            logger.warning("⚠️ DATABASE_URL não encontrada - Modo desenvolvimento sem banco")
+            self.initialized = True  # ✅ CORREÇÃO: Marcar como inicializado mesmo sem banco
             return
         
         try:
             # Testar conexão primeiro
             test_conn = self.create_direct_connection()
             if not test_conn:
-                logger.error("❌ Não foi possível conectar ao banco")
-                self.initialized = False
+                logger.error("❌ Não foi possível conectar ao banco - Modo desenvolvimento")
+                self.initialized = True  # ✅ CORREÇÃO: Continuar sem banco
                 return
                 
             test_conn.close()
             
-            # ✅ CORREÇÃO: Pool simplificado sem configurações complexas
+            # ✅ CORREÇÃO: Pool com configuração otimizada
             with pool_lock:
                 database_url = self.database_url
                 if database_url.startswith('postgres://'):
                     database_url = database_url.replace('postgres://', 'postgresql://')
                     
                 connection_pool = pool.SimpleConnectionPool(
-                    1, 10,  # min=1, max=10 conexões
-                    dsn=database_url
+                    self.pool_min, 
+                    self.pool_max,
+                    dsn=database_url,
+                    sslmode='require'
                 )
                 
-            logger.info("✅ Pool de conexões criado!")
+            logger.info(f"✅ Pool de conexões criado! (min: {self.pool_min}, max: {self.pool_max})")
             
             # Criar tabelas
             self.create_tables()
@@ -128,10 +144,10 @@ class DatabaseManager:
             
         except Exception as e:
             logger.error(f"❌ Erro na inicialização do banco: {e}")
-            self.initialized = False
+            self.initialized = True  # ✅ CORREÇÃO: Continuar mesmo com erro
 
     def create_tables(self):
-        """✅ CORREÇÃO: Tabelas com estrutura CORRIGIDA (sem conflito de colunas)"""
+        """✅ CORREÇÃO: Tabelas com estrutura consistente"""
         conn = self.get_db_connection()
         if not conn:
             logger.error("❌ Falha ao conectar para criar tabelas")
@@ -140,7 +156,7 @@ class DatabaseManager:
         cur = conn.cursor()
         
         try:
-            # ✅ CORREÇÃO: Primeiro verificar se as tabelas existem e quais colunas têm
+            # ✅ CORREÇÃO: Verificar tabelas existentes
             cur.execute("""
                 SELECT table_name FROM information_schema.tables 
                 WHERE table_schema = 'public'
@@ -152,7 +168,7 @@ class DatabaseManager:
                 cur.execute('''
                     CREATE TABLE users (
                         user_id VARCHAR(255) PRIMARY KEY,
-                        email VARCHAR(255) NOT NULL,
+                        email VARCHAR(255) NOT NULL UNIQUE,
                         display_name VARCHAR(255),
                         avatar_url TEXT,
                         email_verified BOOLEAN DEFAULT FALSE,
@@ -164,13 +180,15 @@ class DatabaseManager:
                     )
                 ''')
                 logger.info("✅ Tabela 'users' criada")
+            else:
+                logger.info("✅ Tabela 'users' já existe")
 
-            # Tabela de estados do jogo - ✅ CORREÇÃO: Usar 'coins' em vez de 'popcoins' para compatibilidade
+            # Tabela de estados do jogo
             if 'user_game_states' not in existing_tables:
                 cur.execute('''
                     CREATE TABLE user_game_states (
                         user_id VARCHAR(255) PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
-                        coins BIGINT DEFAULT 0,
+                        popcoins BIGINT DEFAULT 0,
                         coins_per_click INTEGER DEFAULT 1,
                         coins_per_second NUMERIC(10,2) DEFAULT 0,
                         total_coins BIGINT DEFAULT 0,
@@ -193,30 +211,15 @@ class DatabaseManager:
                 ''')
                 logger.info("✅ Tabela 'user_game_states' criada")
             else:
-                # ✅ CORREÇÃO: Se a tabela já existe, verificar se tem a coluna 'coins'
+                logger.info("✅ Tabela 'user_game_states' já existe")
+                # ✅ CORREÇÃO: Verificar e adicionar coluna popcoins se necessário
                 try:
-                    cur.execute("SELECT coins FROM user_game_states LIMIT 1")
-                    logger.info("✅ Coluna 'coins' já existe na tabela")
+                    cur.execute("SELECT popcoins FROM user_game_states LIMIT 1")
                 except Exception:
-                    # Se não tem a coluna 'coins', adicionar
-                    logger.info("🔄 Adicionando coluna 'coins' à tabela existente...")
-                    cur.execute('ALTER TABLE user_game_states ADD COLUMN coins BIGINT DEFAULT 0')
+                    logger.info("🔄 Adicionando coluna 'popcoins' à tabela existente...")
+                    cur.execute('ALTER TABLE user_game_states ADD COLUMN popcoins BIGINT DEFAULT 0')
                     conn.commit()
-                    logger.info("✅ Coluna 'coins' adicionada")
-
-            # Tabela de conquistas
-            if 'user_achievements' not in existing_tables:
-                cur.execute('''
-                    CREATE TABLE user_achievements (
-                        achievement_id SERIAL PRIMARY KEY,
-                        user_id VARCHAR(255) REFERENCES users(user_id) ON DELETE CASCADE,
-                        achievement_name VARCHAR(255) NOT NULL,
-                        achievement_description TEXT,
-                        unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        UNIQUE(user_id, achievement_name)
-                    )
-                ''')
-                logger.info("✅ Tabela 'user_achievements' criada")
+                    logger.info("✅ Coluna 'popcoins' adicionada")
 
             # Tabela de ranking
             if 'user_ranking' not in existing_tables:
@@ -230,31 +233,27 @@ class DatabaseManager:
                     )
                 ''')
                 logger.info("✅ Tabela 'user_ranking' criada")
+            else:
+                logger.info("✅ Tabela 'user_ranking' já existe")
 
-            # ✅ CORREÇÃO: Criar índices apenas se não existirem
-            cur.execute('''
-                SELECT indexname FROM pg_indexes 
-                WHERE tablename = 'user_game_states' AND indexname = 'idx_user_game_states_coins'
-            ''')
-            if not cur.fetchone():
-                cur.execute('CREATE INDEX idx_user_game_states_coins ON user_game_states(coins DESC)')
-
-            cur.execute('''
-                SELECT indexname FROM pg_indexes 
-                WHERE tablename = 'user_ranking' AND indexname = 'idx_user_ranking_score'
-            ''')
-            if not cur.fetchone():
-                cur.execute('CREATE INDEX idx_user_ranking_score ON user_ranking(total_score DESC)')
-
-            cur.execute('''
-                SELECT indexname FROM pg_indexes 
-                WHERE tablename = 'users' AND indexname = 'idx_users_email'
-            ''')
-            if not cur.fetchone():
-                cur.execute('CREATE INDEX idx_users_email ON users(email)')
+            # ✅ CORREÇÃO: Criar índices de forma condicional
+            indexes = [
+                ('idx_user_game_states_popcoins', 'user_game_states', 'popcoins DESC'),
+                ('idx_user_ranking_score', 'user_ranking', 'total_score DESC'),
+                ('idx_users_email', 'users', 'email')
+            ]
+            
+            for index_name, table_name, columns in indexes:
+                cur.execute(f"""
+                    SELECT indexname FROM pg_indexes 
+                    WHERE tablename = '{table_name}' AND indexname = '{index_name}'
+                """)
+                if not cur.fetchone():
+                    cur.execute(f'CREATE INDEX {index_name} ON {table_name}({columns})')
+                    logger.info(f"✅ Índice '{index_name}' criado")
             
             conn.commit()
-            logger.info("✅ Todas as tabelas criadas/verificadas com sucesso!")
+            logger.info("✅ Estrutura do banco verificada/criada com sucesso!")
             
         except Exception as e:
             logger.error(f"❌ Erro na criação das tabelas: {e}")
@@ -266,9 +265,9 @@ class DatabaseManager:
     # ========== MÉTODOS DE USUÁRIO ==========
 
     def save_user_data(self, user_id: str, user_data: Dict[str, Any]) -> bool:
-        """✅ CORREÇÃO: Salva dados usando 'coins' em vez de 'popcoins'"""
+        """✅ CORREÇÃO: Salva dados de forma consistente"""
         if not self.initialized:
-            logger.warning("⚠️ Banco não inicializado - modo desenvolvimento")
+            logger.warning("⚠️ Banco não inicializado - salvamento simulado")
             return True
         
         conn = self.get_db_connection()
@@ -280,7 +279,7 @@ class DatabaseManager:
             with conn.cursor() as cur:
                 current_time = datetime.now()
                 
-                # Inserir/atualizar usuário
+                # ✅ CORREÇÃO: Inserir/atualizar usuário
                 cur.execute('''
                     INSERT INTO users (user_id, email, display_name, avatar_url, 
                                      email_verified, last_login, last_activity, preferences)
@@ -305,20 +304,18 @@ class DatabaseManager:
                     json.dumps(user_data.get('preferences', {}))
                 ))
                 
-                # ✅ CORREÇÃO: Usar 'coins' em vez de 'popcoins' no banco
+                # ✅ CORREÇÃO: Salvar dados do jogo
                 if user_data.get('game_data'):
                     game_data = user_data['game_data']
-                    # Converter 'popcoins' para 'coins' para o banco
-                    coins_value = game_data.get('popcoins', game_data.get('coins', 0))
                     
                     cur.execute('''
                         INSERT INTO user_game_states 
-                        (user_id, coins, coins_per_click, coins_per_second, 
-                         total_coins, prestige_level, click_count, level, experience,
+                        (user_id, popcoins, coins_per_click, coins_per_second, total_coins,
+                         prestige_level, click_count, level, experience,
                          upgrades, achievements, inventory, last_update)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s)
                         ON CONFLICT (user_id) DO UPDATE SET
-                            coins = EXCLUDED.coins,
+                            popcoins = EXCLUDED.popcoins,
                             coins_per_click = EXCLUDED.coins_per_click,
                             coins_per_second = EXCLUDED.coins_per_second,
                             total_coins = EXCLUDED.total_coins,
@@ -333,7 +330,7 @@ class DatabaseManager:
                             updated_at = CURRENT_TIMESTAMP
                     ''', (
                         user_id,
-                        coins_value,
+                        game_data.get('popcoins', 0),
                         game_data.get('coins_per_click', 1),
                         game_data.get('coins_per_second', 0),
                         game_data.get('total_coins', 0),
@@ -359,15 +356,15 @@ class DatabaseManager:
             self.return_db_connection(conn)
 
     def get_user_data(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """✅ CORREÇÃO: Converter 'coins' do banco para 'popcoins' na resposta"""
+        """✅ CORREÇÃO: Obter dados com estrutura consistente"""
         if not self.initialized:
-            logger.warning("⚠️ Banco não inicializado - modo desenvolvimento")
-            return None
+            logger.warning("⚠️ Banco não inicializado - retornando dados padrão")
+            return self.get_default_user_data(user_id)
         
         conn = self.get_db_connection()
         if not conn:
             logger.error("❌ Falha ao conectar para obter dados do usuário")
-            return None
+            return self.get_default_user_data(user_id)
         
         try:
             with conn.cursor(cursor_factory=DictCursor) as cur:
@@ -375,7 +372,7 @@ class DatabaseManager:
                     SELECT 
                         u.user_id, u.email, u.display_name, u.avatar_url,
                         u.email_verified, u.created_at, u.last_login, u.last_activity, u.preferences,
-                        g.coins, g.coins_per_click, g.coins_per_second, g.total_coins,
+                        g.popcoins, g.coins_per_click, g.coins_per_second, g.total_coins,
                         g.prestige_level, g.click_count, g.level, g.experience,
                         g.upgrades, g.achievements, g.inventory, g.last_update
                     FROM users u
@@ -385,10 +382,10 @@ class DatabaseManager:
                 
                 result = cur.fetchone()
                 if not result:
-                    logger.warning(f"⚠️ Usuário não encontrado: {user_id}")
-                    return None
+                    logger.warning(f"⚠️ Usuário não encontrado no banco: {user_id}")
+                    return self.get_default_user_data(user_id)
                 
-                # ✅ CORREÇÃO: Converter 'coins' do banco para 'popcoins' na resposta
+                # ✅ CORREÇÃO: Estrutura consistente de dados
                 user_data = {
                     'uid': result['user_id'],
                     'email': result['email'],
@@ -400,7 +397,7 @@ class DatabaseManager:
                     'last_activity': result['last_activity'].isoformat() if result['last_activity'] else datetime.now().isoformat(),
                     'preferences': result['preferences'] or {},
                     'game_data': {
-                        'popcoins': result['coins'] or 0,  # ✅ CORREÇÃO: coins → popcoins
+                        'popcoins': result['popcoins'] or 0,
                         'clicks': result['click_count'] or 0,
                         'level': result['level'] or 1,
                         'experience': result['experience'] or 0,
@@ -419,157 +416,47 @@ class DatabaseManager:
                     }
                 }
                 
-                logger.info(f"✅ Dados carregados para usuário: {user_id}")
+                logger.info(f"✅ Dados carregados do banco para usuário: {user_id}")
                 return user_data
                 
         except Exception as e:
             logger.error(f"❌ Erro ao obter dados do usuário {user_id}: {e}")
-            return None
+            return self.get_default_user_data(user_id)
         finally:
             self.return_db_connection(conn)
 
-    # ========== MÉTODOS DO JOGO ==========
-
-    def get_user_game_state(self, user_id: str) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Converter 'coins' para 'popcoins'"""
-        if not self.initialized:
-            logger.warning("⚠️ Banco não inicializado - retornando estado padrão")
-            return self.get_default_game_state()
-        
-        conn = self.get_db_connection()
-        if not conn:
-            logger.error("❌ Falha ao conectar para obter estado do jogo")
-            return self.get_default_game_state()
-        
-        try:
-            with conn.cursor(cursor_factory=DictCursor) as cur:
-                cur.execute('''
-                    SELECT coins, coins_per_click, coins_per_second, total_coins,
-                           prestige_level, click_count, level, experience, upgrades, achievements,
-                           inventory, last_update
-                    FROM user_game_states
-                    WHERE user_id = %s
-                ''', (user_id,))
-                
-                result = cur.fetchone()
-                if result:
-                    # ✅ CORREÇÃO: Converter 'coins' para 'popcoins'
-                    game_state = {
-                        'popcoins': result['coins'] or 0,
-                        'coins_per_click': result['coins_per_click'] or 1,
-                        'coins_per_second': float(result['coins_per_second'] or 0),
-                        'total_coins': result['total_coins'] or 0,
-                        'prestige_level': result['prestige_level'] or 0,
-                        'clicks': result['click_count'] or 0,
-                        'level': result['level'] or 1,
-                        'experience': result['experience'] or 0,
-                        'upgrades': result['upgrades'] or {
-                            'click_power': 1,
-                            'auto_clicker': 0,
-                            'auto_clickers': 0,
-                            'click_bots': 0
-                        },
-                        'achievements': result['achievements'] or [],
-                        'inventory': result['inventory'] or [],
-                        'last_update': result['last_update'].timestamp() if result['last_update'] else datetime.now().timestamp()
-                    }
-                    return game_state
-                else:
-                    return self.get_default_game_state()
-                    
-        except Exception as e:
-            logger.error(f"❌ Erro ao obter estado do jogo para {user_id}: {e}")
-            return self.get_default_game_state()
-        finally:
-            self.return_db_connection(conn)
-
-    def save_game_state(self, user_id: str, game_state: Dict[str, Any]) -> bool:
-        """✅ CORREÇÃO: Converter 'popcoins' para 'coins' no banco"""
-        if not self.initialized:
-            logger.warning("⚠️ Banco não inicializado - modo desenvolvimento")
-            return True
-        
-        conn = self.get_db_connection()
-        if not conn:
-            logger.error("❌ Falha ao conectar para salvar estado do jogo")
-            return False
-        
-        try:
-            with conn.cursor() as cur:
-                current_time = datetime.now()
-                
-                # ✅ CORREÇÃO: Converter 'popcoins' para 'coins' para o banco
-                coins_value = game_state.get('popcoins', game_state.get('coins', 0))
-                
-                cur.execute('''
-                    INSERT INTO user_game_states 
-                    (user_id, coins, coins_per_click, coins_per_second, total_coins,
-                     prestige_level, click_count, level, experience, upgrades, achievements, inventory, last_update)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s)
-                    ON CONFLICT (user_id) DO UPDATE SET
-                        coins = EXCLUDED.coins,
-                        coins_per_click = EXCLUDED.coins_per_click,
-                        coins_per_second = EXCLUDED.coins_per_second,
-                        total_coins = EXCLUDED.total_coins,
-                        prestige_level = EXCLUDED.prestige_level,
-                        click_count = EXCLUDED.click_count,
-                        level = EXCLUDED.level,
-                        experience = EXCLUDED.experience,
-                        upgrades = EXCLUDED.upgrades,
-                        achievements = EXCLUDED.achievements,
-                        inventory = EXCLUDED.inventory,
-                        last_update = EXCLUDED.last_update,
-                        updated_at = CURRENT_TIMESTAMP
-                ''', (
-                    user_id,
-                    coins_value,
-                    game_state.get('coins_per_click', 1),
-                    game_state.get('coins_per_second', 0),
-                    game_state.get('total_coins', 0),
-                    game_state.get('prestige_level', 0),
-                    game_state.get('clicks', 0),
-                    game_state.get('level', 1),
-                    game_state.get('experience', 0),
-                    json.dumps(game_state.get('upgrades', {})),
-                    json.dumps(game_state.get('achievements', [])),
-                    json.dumps(game_state.get('inventory', [])),
-                    current_time
-                ))
-                
-                # Atualizar ranking
-                cur.execute('''
-                    INSERT INTO user_ranking (user_id, total_score, prestige_level, level)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (user_id) DO UPDATE SET
-                        total_score = EXCLUDED.total_score,
-                        prestige_level = EXCLUDED.prestige_level,
-                        level = EXCLUDED.level,
-                        last_updated = CURRENT_TIMESTAMP
-                ''', (user_id, game_state.get('total_coins', 0), 
-                      game_state.get('prestige_level', 0), game_state.get('level', 1)))
-                
-                conn.commit()
-                logger.info(f"✅ Estado do jogo salvo para: {user_id}")
-                return True
-                
-        except Exception as e:
-            logger.error(f"❌ Erro ao salvar estado do jogo para {user_id}: {e}")
-            conn.rollback()
-            return False
-        finally:
-            self.return_db_connection(conn)
+    def get_default_user_data(self, user_id: str) -> Dict[str, Any]:
+        """✅ CORREÇÃO: Dados padrão consistentes"""
+        current_time = datetime.now().isoformat()
+        return {
+            'uid': user_id,
+            'email': 'unknown@example.com',
+            'name': 'Jogador',
+            'picture': '/static/images/default-avatar.png',
+            'email_verified': False,
+            'created_at': current_time,
+            'last_login': current_time,
+            'last_activity': current_time,
+            'preferences': {
+                'notifications': True,
+                'sound_effects': True,
+                'music': True,
+                'autosave': True
+            },
+            'game_data': self.get_default_game_state()
+        }
 
     def get_default_game_state(self) -> Dict[str, Any]:
-        """Estado padrão do jogo"""
+        """✅ CORREÇÃO: Estado padrão do jogo"""
         return {
             'popcoins': 0,
+            'clicks': 0,
+            'level': 1,
+            'experience': 0,
             'coins_per_click': 1,
             'coins_per_second': 0,
             'total_coins': 0,
             'prestige_level': 0,
-            'clicks': 0,
-            'level': 1,
-            'experience': 0,
             'upgrades': {
                 'click_power': 1,
                 'auto_clicker': 0,
@@ -577,13 +464,105 @@ class DatabaseManager:
                 'click_bots': 0
             },
             'achievements': [],
-            'inventory': [],
-            'last_update': datetime.now().timestamp()
+            'inventory': []
         }
 
-    # ... (manter os outros métodos get_ranking, health_check, etc.)
+    def get_ranking(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """✅ CORREÇÃO: Ranking otimizado"""
+        if not self.initialized:
+            logger.warning("⚠️ Banco não inicializado - retornando ranking mock")
+            return self.get_mock_ranking(limit)
+        
+        conn = self.get_db_connection()
+        if not conn:
+            logger.error("❌ Falha ao conectar para obter ranking")
+            return self.get_mock_ranking(limit)
+        
+        try:
+            with conn.cursor(cursor_factory=DictCursor) as cur:
+                cur.execute('''
+                    SELECT u.user_id, u.display_name, u.avatar_url,
+                           r.total_score, r.prestige_level, r.level
+                    FROM user_ranking r
+                    JOIN users u ON r.user_id = u.user_id
+                    ORDER BY r.total_score DESC, r.prestige_level DESC, r.level DESC
+                    LIMIT %s
+                ''', (limit,))
+                
+                results = cur.fetchall()
+                ranking = []
+                
+                for idx, row in enumerate(results):
+                    ranking.append({
+                        'uid': row['user_id'],
+                        'name': row['display_name'] or f'Jogador {idx + 1}',
+                        'avatar': row['avatar_url'] or '/static/images/default-avatar.png',
+                        'popcoins': row['total_score'],
+                        'prestige_level': row['prestige_level'],
+                        'level': row['level'],
+                        'rank': idx + 1
+                    })
+                
+                logger.info(f"✅ Ranking carregado: {len(ranking)} jogadores")
+                return ranking
+                
+        except Exception as e:
+            logger.error(f"❌ Erro ao obter ranking: {e}")
+            return self.get_mock_ranking(limit)
+        finally:
+            self.return_db_connection(conn)
 
-# ✅ CORREÇÃO: Instância única
+    def get_mock_ranking(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """✅ CORREÇÃO: Ranking mock para desenvolvimento"""
+        mock_ranking = [
+            {'uid': 'user_1', 'name': 'Jogador Top', 'popcoins': 15000, 'level': 15, 'prestige_level': 2, 'rank': 1},
+            {'uid': 'user_2', 'name': 'Clique Mestre', 'popcoins': 12000, 'level': 12, 'prestige_level': 1, 'rank': 2},
+            {'uid': 'user_3', 'name': 'Coletor Ávido', 'popcoins': 8000, 'level': 10, 'prestige_level': 0, 'rank': 3}
+        ]
+        return mock_ranking[:limit]
+
+    def health_check(self) -> Dict[str, Any]:
+        """✅ CORREÇÃO: Health check do banco"""
+        try:
+            if not self.initialized:
+                return {
+                    'healthy': False,
+                    'message': 'Banco não inicializado',
+                    'database_url_available': bool(self.database_url)
+                }
+            
+            conn = self.get_db_connection()
+            if not conn:
+                return {
+                    'healthy': False,
+                    'message': 'Não foi possível obter conexão',
+                    'database_url_available': bool(self.database_url)
+                }
+            
+            try:
+                with conn.cursor() as cur:
+                    cur.execute('SELECT version(), current_database(), current_user')
+                    result = cur.fetchone()
+                
+                return {
+                    'healthy': True,
+                    'message': 'Banco operacional',
+                    'database_version': result[0] if result else 'Unknown',
+                    'database_name': result[1] if result else 'Unknown',
+                    'database_user': result[2] if result else 'Unknown',
+                    'pool_size': connection_pool._used if connection_pool else 0
+                }
+            finally:
+                self.return_db_connection(conn)
+                
+        except Exception as e:
+            return {
+                'healthy': False,
+                'message': f'Erro no health check: {e}',
+                'database_url_available': bool(self.database_url)
+            }
+
+# ✅ CORREÇÃO: Instância única com inicialização controlada
 db_manager = None
 
 def get_database_manager():
@@ -591,14 +570,22 @@ def get_database_manager():
     global db_manager
     if db_manager is None:
         try:
+            logger.info("🔄 Criando DatabaseManager...")
             db_manager = DatabaseManager()
+            
             if db_manager.initialized:
-                logger.info("✅ DatabaseManager inicializado com sucesso!")
+                logger.info("🎉 DatabaseManager inicializado com sucesso!")
+                
+                # Log do health check
+                health = db_manager.health_check()
+                logger.info(f"📊 Health check do banco: {health}")
             else:
-                logger.error("❌ DatabaseManager falhou na inicialização")
+                logger.warning("⚠️ DatabaseManager em modo desenvolvimento (sem banco)")
+                
         except Exception as e:
             logger.error(f"❌ Falha crítica ao criar DatabaseManager: {e}")
             db_manager = None
+    
     return db_manager
 
 # Inicialização controlada

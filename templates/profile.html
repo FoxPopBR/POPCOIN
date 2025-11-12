@@ -31,10 +31,10 @@
                     <div class="profile-info">
                         <div class="profile-avatar-section">
                             <div class="profile-avatar">
-                                <!-- ✅ CORREÇÃO: Avatar com fallback para imagem padrão -->
+                                <!-- ✅ CORREÇÃO: Avatar com fallback robusto -->
                                 <img id="profile-avatar-img" src="/static/images/default-avatar.png" alt="Avatar" class="user-avatar large">
                                 <div class="avatar-actions">
-                                    <span class="avatar-status" id="avatar-status">Foto do Google</span>
+                                    <span class="avatar-status" id="avatar-status">Carregando...</span>
                                 </div>
                             </div>
                         </div>
@@ -270,19 +270,23 @@ class ProfileManager {
     }
 
     async checkAuthentication() {
-        // ✅ CORREÇÃO: Verificação mais robusta
-        let attempts = 0;
-        while (!window.authManager && attempts < 30) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
+        // ✅ CORREÇÃO: Verificação simplificada e direta
+        if (!window.authManager) {
+            console.log('⏳ Aguardando authManager...');
+            let attempts = 0;
+            while (!window.authManager && attempts < 30) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                attempts++;
+            }
         }
 
-        if (!window.authManager || !window.authManager.isUserAuthenticated()) {
-            this.showMessage('Você precisa estar logado para acessar esta página', 'error');
+        if (!window.authManager || !window.authManager.isAuthenticated) {
+            this.showMessage('❌ Você precisa estar logado para acessar esta página', 'error');
             setTimeout(() => window.location.href = '/', 2000);
             return false;
         }
         
+        console.log('✅ Usuário autenticado:', window.authManager.user?.email);
         return true;
     }
 
@@ -291,20 +295,11 @@ class ProfileManager {
             console.log('📥 Carregando perfil do usuário...');
             this.showProfileLoading(true);
 
-            // ✅ CORREÇÃO: Usar authManager para obter token
-            const token = await window.authManager.refreshToken();
-            if (!token) {
-                throw new Error('Token de autenticação não disponível');
-            }
-
-            const response = await fetch('/api/user/profile', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            // ✅ CORREÇÃO: Usar endpoint direto sem token (sessão já está ativa)
+            const response = await fetch('/api/user/profile');
 
             if (response.status === 401) {
-                this.showMessage('Sessão expirada. Redirecionando...', 'error');
+                this.showMessage('🔐 Sessão expirada. Redirecionando...', 'error');
                 setTimeout(() => window.location.href = '/', 2000);
                 return;
             }
@@ -319,7 +314,7 @@ class ProfileManager {
                 this.userProfile = data.profile;
                 this.originalData = JSON.parse(JSON.stringify(this.userProfile));
                 this.updateProfileUI();
-                console.log('✅ Perfil carregado com sucesso');
+                console.log('✅ Perfil carregado com sucesso:', this.userProfile.email);
             } else {
                 throw new Error(data.error || 'Erro ao carregar perfil');
             }
@@ -327,12 +322,12 @@ class ProfileManager {
             console.error('❌ Erro ao carregar perfil:', error);
             
             if (error.message.includes("autenticado") || error.message.includes("autorizado")) {
-                this.showMessage('Sessão expirada. Redirecionando...', 'error');
+                this.showMessage('🔐 Sessão expirada. Redirecionando...', 'error');
                 setTimeout(() => window.location.href = '/', 2000);
                 return;
             }
             
-            this.showMessage('Erro ao carregar perfil: ' + error.message, 'error');
+            this.showMessage('❌ Erro ao carregar perfil: ' + error.message, 'error');
         } finally {
             this.showProfileLoading(false);
         }
@@ -348,33 +343,91 @@ class ProfileManager {
     updateProfileUI() {
         if (!this.userProfile) return;
 
-        // Informações básicas
-        document.getElementById('profile-name').value = this.userProfile.name || '';
-        document.getElementById('profile-email').value = this.userProfile.email || '';
+        console.log('🎨 Atualizando UI do perfil...');
+
+        // ✅ CORREÇÃO: Informações básicas com fallbacks
+        document.getElementById('profile-name').value = this.userProfile.name || this.userProfile.email?.split('@')[0] || 'Jogador';
+        document.getElementById('profile-email').value = this.userProfile.email || 'Não disponível';
         document.getElementById('profile-id').value = this.userProfile.uid || 'N/A';
         
         // Data de criação
         if (this.userProfile.created_at) {
             const createdDate = new Date(this.userProfile.created_at).toLocaleDateString('pt-BR');
             document.getElementById('profile-created').value = createdDate;
+        } else {
+            document.getElementById('profile-created').value = new Date().toLocaleDateString('pt-BR');
         }
 
-        // ✅ CORREÇÃO: Avatar com fallback correto
-        const avatarImg = document.getElementById('profile-avatar-img');
-        const avatarStatus = document.getElementById('avatar-status');
-        if (this.userProfile.picture && this.userProfile.picture !== '/static/images/default-avatar.png') {
-            avatarImg.src = this.userProfile.picture;
-            avatarStatus.textContent = 'Foto do Google';
-            avatarStatus.style.color = '#28a745';
-        } else {
-            avatarImg.src = '/static/images/default-avatar.png';
-            avatarStatus.textContent = 'Foto Padrão';
-            avatarStatus.style.color = '#6c757d';
-        }
+        // ✅ CORREÇÃO CRÍTICA: Avatar com fallback robusto
+        this.loadAvatar();
 
         // Estatísticas do jogo
+        this.updateGameStats();
+
+        // Preferências
+        this.updatePreferences();
+
+        // Informações de sessão
+        this.updateSessionInfo();
+        
+        // Carregar ranking
+        this.loadRanking();
+        
+        // Carregar conquistas
+        this.loadAchievements();
+    }
+
+    loadAvatar() {
+        const avatarImg = document.getElementById('profile-avatar-img');
+        const avatarStatus = document.getElementById('avatar-status');
+        
+        if (!avatarImg) {
+            console.error('❌ Elemento do avatar não encontrado');
+            return;
+        }
+
+        // ✅ CORREÇÃO: Lógica robusta de carregamento de avatar
+        const avatarUrl = this.userProfile.picture || this.userProfile.photoURL || '/static/images/default-avatar.png';
+        
+        console.log('🖼️ Tentando carregar avatar:', avatarUrl);
+        
+        // Resetar eventos anteriores
+        avatarImg.onerror = null;
+        avatarImg.onload = null;
+
+        avatarImg.src = avatarUrl;
+        
+        // Verificar se é uma URL do Google
+        if (avatarUrl.includes('googleusercontent.com') || avatarUrl.includes('ggpht.com')) {
+            avatarStatus.textContent = 'Foto do Google';
+            avatarStatus.style.color = '#28a745';
+        } else if (avatarUrl === '/static/images/default-avatar.png') {
+            avatarStatus.textContent = 'Foto Padrão';
+            avatarStatus.style.color = '#6c757d';
+        } else {
+            avatarStatus.textContent = 'Foto Personalizada';
+            avatarStatus.style.color = '#007bff';
+        }
+
+        // ✅ CORREÇÃO: Fallback robusto para erro de carregamento
+        avatarImg.onerror = function() {
+            console.log('❌ Erro ao carregar avatar, usando fallback');
+            this.src = '/static/images/default-avatar.png';
+            this.onerror = null; // Prevenir loop infinito
+            avatarStatus.textContent = 'Erro ao carregar foto';
+            avatarStatus.style.color = '#dc3545';
+        };
+
+        avatarImg.onload = function() {
+            console.log('✅ Avatar carregado com sucesso');
+        };
+    }
+
+    updateGameStats() {
         if (this.userProfile.game_data) {
             const gameData = this.userProfile.game_data;
+            
+            // ✅ CORREÇÃO: Valores padrão para evitar undefined
             document.getElementById('stat-popcoins').textContent = this.formatNumber(gameData.popcoins || 0);
             document.getElementById('stat-clicks').textContent = this.formatNumber(gameData.clicks || 0);
             document.getElementById('stat-level').textContent = gameData.level || 1;
@@ -384,39 +437,60 @@ class ProfileManager {
             
             // Progresso do nível
             this.updateLevelProgress(gameData.experience || 0, gameData.level || 1);
+        } else {
+            // ✅ CORREÇÃO: Dados padrão se não houver game_data
+            document.getElementById('stat-popcoins').textContent = '0';
+            document.getElementById('stat-clicks').textContent = '0';
+            document.getElementById('stat-level').textContent = '1';
+            document.getElementById('stat-exp').textContent = '0';
+            document.getElementById('stat-coins-per-click').textContent = '1';
+            document.getElementById('stat-coins-per-second').textContent = '0.0';
+            this.updateLevelProgress(0, 1);
         }
-
-        // Preferências
-        if (this.userProfile.preferences) {
-            const prefs = this.userProfile.preferences;
-            document.getElementById('pref-notifications').checked = prefs.notifications !== false;
-            document.getElementById('pref-sound').checked = prefs.sound_effects !== false;
-            document.getElementById('pref-music').checked = prefs.music !== false;
-            document.getElementById('pref-autosave').checked = prefs.autosave !== false;
-        }
-
-        // Informações de sessão
-        if (this.userProfile.last_login) {
-            const lastLogin = new Date(this.userProfile.last_login).toLocaleString('pt-BR');
-            document.getElementById('last-login').textContent = lastLogin;
-        }
-
-        document.getElementById('session-start').textContent = new Date().toLocaleString('pt-BR');
-        
-        // Carregar ranking
-        this.loadRanking();
-        
-        // Carregar conquistas
-        this.loadAchievements();
     }
 
     updateLevelProgress(exp, level) {
         const expNeeded = level * 100;
         const progress = Math.min((exp / expNeeded) * 100, 100);
         
-        document.getElementById('level-progress').style.width = progress + '%';
-        document.getElementById('current-exp').textContent = this.formatNumber(exp);
-        document.getElementById('next-level-exp').textContent = this.formatNumber(expNeeded);
+        const progressBar = document.getElementById('level-progress');
+        const currentExp = document.getElementById('current-exp');
+        const nextLevelExp = document.getElementById('next-level-exp');
+        
+        if (progressBar) progressBar.style.width = progress + '%';
+        if (currentExp) currentExp.textContent = this.formatNumber(exp);
+        if (nextLevelExp) nextLevelExp.textContent = this.formatNumber(expNeeded);
+    }
+
+    updatePreferences() {
+        // ✅ CORREÇÃO: Valores padrão para preferências
+        const prefs = this.userProfile.preferences || {};
+        
+        document.getElementById('pref-notifications').checked = prefs.notifications !== false;
+        document.getElementById('pref-sound').checked = prefs.sound_effects !== false;
+        document.getElementById('pref-music').checked = prefs.music !== false;
+        document.getElementById('pref-autosave').checked = prefs.autosave !== false;
+    }
+
+    updateSessionInfo() {
+        if (this.userProfile.last_login) {
+            const lastLogin = new Date(this.userProfile.last_login).toLocaleString('pt-BR');
+            document.getElementById('last-login').textContent = lastLogin;
+        } else {
+            document.getElementById('last-login').textContent = 'Agora';
+        }
+
+        document.getElementById('session-start').textContent = new Date().toLocaleString('pt-BR');
+        
+        // Status da conta
+        const accountStatus = document.getElementById('account-status');
+        if (this.userProfile.email_verified) {
+            accountStatus.textContent = 'Verificada';
+            accountStatus.style.color = '#28a745';
+        } else {
+            accountStatus.textContent = 'Não verificada';
+            accountStatus.style.color = '#dc3545';
+        }
     }
 
     async loadRanking() {
@@ -427,27 +501,52 @@ class ProfileManager {
                 this.updateRankingUI(data.ranking);
             }
         } catch (error) {
-            console.error('Erro ao carregar ranking:', error);
+            console.error('❌ Erro ao carregar ranking:', error);
         }
     }
 
     updateRankingUI(ranking) {
-        if (!ranking || !this.userProfile) return;
+        if (!ranking || !Array.isArray(ranking) || !this.userProfile) return;
         
         const currentUser = ranking.find(user => user.uid === this.userProfile.uid);
         if (currentUser) {
-            document.getElementById('global-rank').textContent = `#${ranking.indexOf(currentUser) + 1}`;
+            const userIndex = ranking.indexOf(currentUser);
+            document.getElementById('global-rank').textContent = `#${userIndex + 1}`;
             document.getElementById('total-score').textContent = this.formatNumber(currentUser.popcoins || 0);
+        } else {
+            document.getElementById('global-rank').textContent = '#-';
+            document.getElementById('total-score').textContent = '0';
         }
     }
 
     loadAchievements() {
-        // Simular conquistas - em produção viria do backend
+        // ✅ CORREÇÃO: Conquistas baseadas no progresso real
+        const gameData = this.userProfile.game_data || {};
         const achievements = [
-            { id: 'first_coin', name: '💰 Primeira Moeda', description: 'Ganhe sua primeira moeda', unlocked: true },
-            { id: 'clicker', name: '👆 Clique Inicial', description: 'Faça 10 cliques', unlocked: true },
-            { id: 'collector', name: '🏆 Colecionador', description: 'Acumule 1000 moedas', unlocked: false },
-            { id: 'upgrader', name: '⚡ Upgrade Mestre', description: 'Compre 5 upgrades', unlocked: false }
+            { 
+                id: 'first_coin', 
+                name: '💰 Primeira Moeda', 
+                description: 'Ganhe sua primeira moeda', 
+                unlocked: (gameData.popcoins || 0) > 0 
+            },
+            { 
+                id: 'clicker', 
+                name: '👆 Clique Inicial', 
+                description: 'Faça 10 cliques', 
+                unlocked: (gameData.clicks || 0) >= 10 
+            },
+            { 
+                id: 'collector', 
+                name: '🏆 Colecionador', 
+                description: 'Acumule 1000 moedas', 
+                unlocked: (gameData.popcoins || 0) >= 1000 
+            },
+            { 
+                id: 'upgrader', 
+                name: '⚡ Upgrade Mestre', 
+                description: 'Alcance o nível 5', 
+                unlocked: (gameData.level || 0) >= 5 
+            }
         ];
 
         const achievementsList = document.getElementById('profile-achievements');
@@ -455,11 +554,24 @@ class ProfileManager {
         
         achievementsList.innerHTML = '';
 
+        const unlockedCount = achievements.filter(a => a.unlocked).length;
+        
+        if (unlockedCount === 0) {
+            achievementsList.innerHTML = `
+                <div class="achievement-placeholder">
+                    🎯 Complete desafios no jogo para desbloquear conquistas!
+                </div>
+            `;
+            return;
+        }
+
         achievements.forEach(achievement => {
+            if (!achievement.unlocked) return;
+            
             const achievementEl = document.createElement('div');
-            achievementEl.className = `achievement ${achievement.unlocked ? 'unlocked' : 'locked'}`;
+            achievementEl.className = 'achievement unlocked';
             achievementEl.innerHTML = `
-                <div class="achievement-icon">${achievement.unlocked ? '✅' : '🔒'}</div>
+                <div class="achievement-icon">✅</div>
                 <div class="achievement-info">
                     <strong>${achievement.name}</strong>
                     <small>${achievement.description}</small>
@@ -471,14 +583,9 @@ class ProfileManager {
 
     async updateProfile() {
         try {
+            console.log('💾 Salvando alterações do perfil...');
             this.showProfileLoading(true);
             
-            const token = await window.authManager.refreshToken();
-            if (!token) {
-                this.showMessage('Erro de autenticação', 'error');
-                return;
-            }
-
             const updates = {
                 name: document.getElementById('profile-name').value.trim(),
                 preferences: {
@@ -489,17 +596,21 @@ class ProfileManager {
                 }
             };
 
-            // Validar nome
+            // ✅ CORREÇÃO: Validação do nome
             if (!updates.name) {
-                this.showMessage('Por favor, insira um nome de exibição', 'error');
+                this.showMessage('❌ Por favor, insira um nome de exibição', 'error');
+                return;
+            }
+
+            if (updates.name.length < 2) {
+                this.showMessage('❌ O nome deve ter pelo menos 2 caracteres', 'error');
                 return;
             }
 
             const response = await fetch('/api/user/profile', {
                 method: 'PUT',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(updates)
             });
@@ -507,15 +618,18 @@ class ProfileManager {
             if (response.ok) {
                 const result = await response.json();
                 if (result.success) {
-                    this.showMessage('Perfil atualizado com sucesso!', 'success');
+                    this.showMessage('✅ Perfil atualizado com sucesso!', 'success');
                     this.userProfile = result.profile;
                     this.originalData = JSON.parse(JSON.stringify(this.userProfile));
                     
                     // ✅ CORREÇÃO: Atualizar também no authManager
                     if (window.authManager && window.authManager.user) {
                         window.authManager.user.name = updates.name;
+                        window.authManager.user.preferences = updates.preferences;
                         window.authManager.updateUI(window.authManager.user);
                     }
+                    
+                    console.log('✅ Perfil salvo com sucesso');
                 } else {
                     throw new Error(result.error || 'Erro ao atualizar perfil');
                 }
@@ -524,7 +638,7 @@ class ProfileManager {
             }
         } catch (error) {
             console.error('❌ Erro ao atualizar perfil:', error);
-            this.showMessage('Erro ao atualizar perfil: ' + error.message, 'error');
+            this.showMessage('❌ Erro ao atualizar perfil: ' + error.message, 'error');
         } finally {
             this.showProfileLoading(false);
         }
@@ -540,6 +654,18 @@ class ProfileManager {
                 }
             });
         }
+
+        // Auto-save quando preferências mudam
+        const checkboxes = document.querySelectorAll('.preference-item input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                // Pequeno delay para evitar muitas requisições
+                clearTimeout(this.autoSaveTimeout);
+                this.autoSaveTimeout = setTimeout(() => {
+                    this.updateProfile();
+                }, 1000);
+            });
+        });
     }
 
     startAutoRefresh() {
@@ -561,13 +687,15 @@ class ProfileManager {
     }
 
     showMessage(message, type = 'info') {
-        // Usar o sistema de mensagens do authManager
+        console.log(`💬 ${type}: ${message}`);
+        
+        // Usar o sistema de mensagens do authManager se disponível
         if (window.authManager && window.authManager.showMessage) {
             window.authManager.showMessage(message, type);
             return;
         }
         
-        // Fallback
+        // Fallback local
         const messageDiv = document.getElementById('profile-messages');
         if (!messageDiv) return;
         
@@ -581,14 +709,16 @@ class ProfileManager {
             background: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#17a2b8'};
             color: white;
             font-weight: bold;
+            transition: all 0.3s ease;
         `;
         
         messageDiv.appendChild(messageEl);
         
+        // Auto-remover após 5 segundos
         setTimeout(() => {
             if (messageEl.parentNode) {
                 messageEl.style.opacity = '0';
-                messageEl.style.transition = 'opacity 0.5s ease';
+                messageEl.style.transform = 'translateY(-10px)';
                 setTimeout(() => {
                     if (messageEl.parentNode) {
                         messageEl.remove();
@@ -599,26 +729,27 @@ class ProfileManager {
     }
 }
 
-// ✅ CORREÇÃO: Função para redirecionar para o jogo
+// ✅ CORREÇÃO: Funções globais otimizadas
 function redirectToGame() {
-    if (window.authManager) {
-        window.authManager.redirectToGame();
-    } else {
-        window.location.href = '/game';
-    }
+    console.log('🎮 Redirecionando para o jogo...');
+    window.location.href = '/game';
 }
 
-// ✅ CORREÇÃO: Função logout integrada
 function logout() {
+    console.log('🚪 Iniciando logout...');
     if (window.authManager) {
         window.authManager.logout();
+    } else {
+        // Fallback: redirecionar para home
+        window.location.href = '/';
     }
 }
 
-// Funções globais
 function updateProfile() {
     if (window.profileManager) {
         window.profileManager.updateProfile();
+    } else {
+        alert('❌ Sistema de perfil não carregado. Recarregue a página.');
     }
 }
 
@@ -626,7 +757,7 @@ function resetForm() {
     if (window.profileManager && window.profileManager.originalData) {
         window.profileManager.userProfile = JSON.parse(JSON.stringify(window.profileManager.originalData));
         window.profileManager.updateProfileUI();
-        window.profileManager.showMessage('Alterações descartadas', 'info');
+        window.profileManager.showMessage('🔄 Alterações descartadas', 'info');
     }
 }
 
@@ -636,15 +767,17 @@ function resetPreferences() {
         document.getElementById('pref-sound').checked = true;
         document.getElementById('pref-music').checked = true;
         document.getElementById('pref-autosave').checked = true;
-        window.profileManager.showMessage('Preferências restauradas para os padrões', 'info');
+        window.profileManager.showMessage('⚙️ Preferências restauradas para os padrões', 'info');
+        
+        // Salvar automaticamente
+        setTimeout(() => {
+            updateProfile();
+        }, 500);
     }
 }
 
 function changePassword() {
-    alert('Redirecionando para redefinição de senha...');
-    if (window.authManager) {
-        window.authManager.resetPassword();
-    }
+    alert('🔑 Para alterar sua senha, use a opção "Esqueci minha senha" na página de login.');
 }
 
 function exportData() {
@@ -655,46 +788,67 @@ function exportData() {
         const link = document.createElement('a');
         link.href = url;
         link.download = `popcoin-data-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
         link.click();
+        document.body.removeChild(link);
         URL.revokeObjectURL(url);
+        
+        window.profileManager.showMessage('📤 Dados exportados com sucesso!', 'success');
     }
 }
 
-// ✅ CORREÇÃO: Inicialização melhorada
+// ✅ CORREÇÃO: Inicialização robusta
 document.addEventListener('DOMContentLoaded', function() {
     console.log('👤 Inicializando página de perfil...');
     
     const initProfileManager = async () => {
-        let attempts = 0;
-        while (!window.authManager && attempts < 50) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
-        }
-        
-        if (window.authManager && window.authManager.isUserAuthenticated()) {
-            window.profileManager = new ProfileManager();
-        } else {
-            console.log('❌ Usuário não autenticado, redirecionando...');
-            const messageDiv = document.getElementById('profile-messages');
-            if (messageDiv) {
-                messageDiv.innerHTML = `
-                    <div style="padding: 20px; text-align: center; background: #dc3545; color: white; border-radius: 8px;">
-                        <h3>❌ Acesso não autorizado</h3>
-                        <p>Redirecionando para a página inicial...</p>
-                    </div>
-                `;
+        try {
+            // Aguardar o authManager carregar
+            let attempts = 0;
+            while (!window.authManager && attempts < 50) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                attempts++;
             }
-            setTimeout(() => {
-                window.location.href = '/';
-            }, 2000);
+            
+            if (window.authManager && window.authManager.isAuthenticated) {
+                console.log('✅ Usuário autenticado, inicializando ProfileManager...');
+                window.profileManager = new ProfileManager();
+            } else {
+                console.log('❌ Usuário não autenticado, redirecionando...');
+                this.showUnauthorizedMessage();
+            }
+        } catch (error) {
+            console.error('❌ Erro na inicialização do perfil:', error);
+            this.showUnauthorizedMessage();
         }
     };
+    
+    // Função para mostrar mensagem de não autorizado
+    function showUnauthorizedMessage() {
+        const messageDiv = document.getElementById('profile-messages') || document.querySelector('.profile-content');
+        if (messageDiv) {
+            messageDiv.innerHTML = `
+                <div style="padding: 40px; text-align: center; background: #dc3545; color: white; border-radius: 12px; margin: 2rem 0;">
+                    <h3 style="margin-bottom: 1rem;">❌ Acesso não autorizado</h3>
+                    <p style="margin-bottom: 1.5rem;">Você precisa estar logado para acessar esta página.</p>
+                    <button onclick="window.location.href = '/'" class="btn btn-light" style="padding: 10px 20px;">
+                        🔑 Fazer Login
+                    </button>
+                </div>
+            `;
+        }
+        
+        // Esconder conteúdo principal
+        document.querySelector('.profile-grid').style.display = 'none';
+        document.querySelector('.game-header').style.display = 'none';
+    }
     
     initProfileManager();
 });
 </script>
 
 <style>
+/* ✅ CORREÇÃO: Estilos otimizados e responsivos */
 .profile-content {
     padding: 1rem 0;
 }
@@ -712,6 +866,12 @@ document.addEventListener('DOMContentLoaded', function() {
     border-radius: var(--border-radius);
     box-shadow: var(--shadow);
     border: 1px solid #e9ecef;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.profile-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.1);
 }
 
 .profile-info {
@@ -736,14 +896,21 @@ document.addEventListener('DOMContentLoaded', function() {
     border-radius: 50%;
     border: 4px solid var(--primary-color);
     object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.user-avatar.large:hover {
+    transform: scale(1.05);
 }
 
 .avatar-status {
     display: block;
     font-size: 0.8rem;
-    color: #28a745;
-    margin-top: 0.5rem;
     font-weight: bold;
+    margin-top: 0.5rem;
+    padding: 4px 8px;
+    border-radius: 12px;
+    background: #f8f9fa;
 }
 
 .profile-details {
@@ -758,7 +925,7 @@ document.addEventListener('DOMContentLoaded', function() {
     border: 2px solid #e9ecef;
     border-radius: var(--border-radius);
     font-size: 1rem;
-    transition: var(--transition);
+    transition: all 0.3s ease;
 }
 
 .profile-input:focus {
@@ -784,9 +951,9 @@ document.addEventListener('DOMContentLoaded', function() {
     display: flex;
     gap: 1rem;
     justify-content: center;
+    flex-wrap: wrap;
 }
 
-/* ✅ CORREÇÃO: Botão Jogar em destaque */
 .btn-large {
     padding: 1rem 2rem;
     font-size: 1.2rem;
@@ -807,7 +974,7 @@ document.addEventListener('DOMContentLoaded', function() {
     padding: 1rem;
     background: #f8f9fa;
     border-radius: var(--border-radius);
-    transition: var(--transition);
+    transition: all 0.3s ease;
 }
 
 .stat-item:hover {
@@ -877,7 +1044,7 @@ document.addEventListener('DOMContentLoaded', function() {
     background: #f8f9fa;
     border-radius: var(--border-radius);
     cursor: pointer;
-    transition: var(--transition);
+    transition: all 0.3s ease;
 }
 
 .preference-item:hover {
@@ -886,6 +1053,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .preference-item input[type="checkbox"] {
     margin-top: 0.25rem;
+    transform: scale(1.2);
 }
 
 .preference-label {
@@ -945,7 +1113,7 @@ document.addEventListener('DOMContentLoaded', function() {
     gap: 1rem;
     padding: 0.75rem;
     border-radius: var(--border-radius);
-    transition: var(--transition);
+    transition: all 0.3s ease;
 }
 
 .achievement.unlocked {
@@ -973,6 +1141,8 @@ document.addEventListener('DOMContentLoaded', function() {
     padding: 2rem;
     color: var(--text-light);
     font-style: italic;
+    background: #f8f9fa;
+    border-radius: var(--border-radius);
 }
 
 .account-actions {
@@ -985,16 +1155,24 @@ document.addEventListener('DOMContentLoaded', function() {
 .btn-warning {
     background: #ffc107;
     color: #000;
+    border: none;
 }
 
 .btn-danger {
     background: #dc3545;
     color: white;
+    border: none;
 }
 
 .btn-outline {
     background: transparent;
     border: 2px solid currentColor;
+    color: #dc3545;
+}
+
+.btn-outline:hover {
+    background: #dc3545;
+    color: white;
 }
 
 .session-info {
@@ -1017,11 +1195,6 @@ document.addEventListener('DOMContentLoaded', function() {
     font-weight: bold;
 }
 
-.btn-small {
-    padding: 0.5rem 1rem;
-    font-size: 0.9rem;
-}
-
 /* Loading overlay específico para o perfil */
 .loading-overlay {
     position: fixed;
@@ -1029,17 +1202,19 @@ document.addEventListener('DOMContentLoaded', function() {
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: rgba(0,0,0,0.8);
     color: white;
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 9998;
+    backdrop-filter: blur(5px);
 }
 
 .loading-content {
     text-align: center;
     max-width: 400px;
+    padding: 2rem;
 }
 
 .loading-spinner {
@@ -1055,6 +1230,30 @@ document.addEventListener('DOMContentLoaded', function() {
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+/* Mensagens */
+.message {
+    padding: 12px 16px;
+    margin: 10px 0;
+    border-radius: 8px;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.message-success {
+    background: #28a745;
+    color: white;
+}
+
+.message-error {
+    background: #dc3545;
+    color: white;
+}
+
+.message-info {
+    background: #17a2b8;
+    color: white;
 }
 
 /* Responsividade */
@@ -1089,6 +1288,10 @@ document.addEventListener('DOMContentLoaded', function() {
         text-align: center;
         gap: 0.5rem;
     }
+    
+    .profile-card {
+        padding: 1.5rem;
+    }
 }
 
 @media (max-width: 480px) {
@@ -1106,6 +1309,11 @@ document.addEventListener('DOMContentLoaded', function() {
         flex-direction: column;
         gap: 0.5rem;
         text-align: center;
+    }
+    
+    .user-avatar.large {
+        width: 80px;
+        height: 80px;
     }
 }
 </style>

@@ -307,18 +307,6 @@
                 }
             }
 
-            // Observar mudanças de autenticação
-            window.addEventListener('authStateChanged', function(event) {
-                updateNavigation(event.detail.isAuthenticated);
-            });
-
-            // Inicializar navegação
-            setTimeout(() => {
-                if (window.authManager) {
-                    updateNavigation(window.authManager.isAuthenticated);
-                }
-            }, 1000);
-
             // Prevenir envio de formulários com Enter
             document.addEventListener('keydown', function(event) {
                 if (event.key === 'Enter' && event.target.tagName === 'INPUT') {
