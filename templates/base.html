@@ -395,5 +395,38 @@
         // Expor utilitários globalmente
         window.preventMultipleActions = preventMultipleActions;
     </script>
+    <script>
+    // Fallback para avatar padrão
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🔄 Configurando fallback para avatares...');
+        
+        const setDefaultAvatar = function(img) {
+            console.log('🖼️ Aplicando fallback para avatar:', img.id || img.className);
+            img.onerror = null;
+            // SVG de avatar padrão em base64
+            img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjYwIiBjeT0iNjAiIHI9IjYwIiBmaWxsPSIjRjBGMEYwIi8+CjxjaXJjbGUgY3g9IjYwIiBjeT0iNDUiIHI9IjI1IiBmaWxsPSIjQ0NDIi8+CjxyZWN0IHg9IjMwIiB5PSI3MCIgd2lkdGg9IjYwIiBoZWlnaHQ9IjUwIiByeD0iMjAiIGZpbGw9IiNDQ0MiLz4KPC9zdmc+';
+        };
+        
+        // Aplicar a todos os avatares
+        const avatars = document.querySelectorAll('#user-pic, #profile-avatar-img, .user-avatar');
+        console.log(`👤 Encontrados ${avatars.length} avatares na página`);
+        
+        avatars.forEach(avatar => {
+            if (!avatar.src || avatar.src.includes('default-avatar')) {
+                setDefaultAvatar(avatar);
+            }
+            avatar.addEventListener('error', function() {
+                console.log('❌ Erro ao carregar avatar, aplicando fallback');
+                setDefaultAvatar(this);
+            });
+            
+            // Verificar se o avatar já carregou com sucesso
+            avatar.addEventListener('load', function() {
+                console.log('✅ Avatar carregado com sucesso:', this.src);
+            });
+        });
+    });
+    </script>
+
 </body>
 </html>

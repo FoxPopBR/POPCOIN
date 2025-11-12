@@ -1,3 +1,4 @@
+# auth/auth_manager.py - VERSÃO CORRIGIDA (mantendo estrutura atual)
 import firebase_admin
 from firebase_admin import auth, credentials, exceptions
 import os
@@ -17,7 +18,7 @@ class AuthManager:
         self.init_firebase()
     
     def init_firebase(self) -> bool:
-        """Inicializar Firebase Admin SDK de forma robusta e profissional"""
+        """Inicializar Firebase Admin SDK - CORREÇÃO: Adicionar secret file do Render"""
         try:
             if firebase_admin._apps:
                 logger.info("✅ Firebase Admin já inicializado")
@@ -26,7 +27,19 @@ class AuthManager:
 
             logger.info("🔄 Inicializando Firebase Admin...")
             
-            # Método 1: Credenciais da variável de ambiente (Render.com)
+            # MÉTODO 1: Secret File do Render.com (NOVO - CORREÇÃO PRINCIPAL)
+            secret_file_path = '/etc/secrets/firebase_credentials.json'
+            if os.path.exists(secret_file_path):
+                try:
+                    logger.info(f"📁 Encontrado secret file: {secret_file_path}")
+                    cred = credentials.Certificate(secret_file_path)
+                    self.firebase_app = firebase_admin.initialize_app(cred)
+                    logger.info("✅ Firebase Admin inicializado com secret file do Render")
+                    return True
+                except Exception as e:
+                    logger.warning(f"⚠️ Secret file falhou: {e}")
+
+            # MÉTODO 2: Credenciais da variável de ambiente (mantido do código atual)
             service_account_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT')
             if service_account_json:
                 try:
@@ -40,7 +53,7 @@ class AuthManager:
                 except Exception as e:
                     logger.warning(f"⚠️ Credenciais de serviço falharam: {e}")
 
-            # Método 2: Credenciais padrão do ambiente
+            # MÉTODO 3: Credenciais padrão do ambiente (mantido do código atual)
             try:
                 cred = credentials.ApplicationDefault()
                 self.firebase_app = firebase_admin.initialize_app(cred, {
@@ -51,7 +64,7 @@ class AuthManager:
             except Exception as e:
                 logger.warning(f"⚠️ Credenciais padrão falharam: {e}")
 
-            # Método 3: Modo de desenvolvimento com credenciais mínimas
+            # MÉTODO 4: Modo de desenvolvimento (mantido do código atual)
             logger.warning("🚧 Firebase Admin em modo de desenvolvimento")
             return False
             
@@ -59,22 +72,25 @@ class AuthManager:
             logger.error(f"❌ Erro crítico na inicialização do Firebase: {e}")
             return False
 
+    # 🔥 CORREÇÃO CRÍTICA: Melhorar o verify_firebase_token para funcionar SEM Firebase Admin
     def verify_firebase_token(self, token: str) -> Optional[Dict[str, Any]]:
-        """Verificar token do Firebase com validação rigorosa"""
+        """Verificar token do Firebase - CORREÇÃO: Fallback robusto para API REST"""
         if not token or len(token) < 100:
             logger.warning("Token inválido ou muito curto")
             return None
             
         try:
-            # Método 1: Firebase Admin (mais seguro)
+            # Método 1: Firebase Admin (se disponível)
             if self.firebase_app:
                 try:
                     decoded_token = auth.verify_id_token(token)
                     return self._extract_user_info_from_token(decoded_token, "Firebase Admin")
                 except exceptions.FirebaseError as e:
                     logger.warning(f"Firebase Admin rejeitou o token: {e}")
+                    # NÃO retornar None aqui - tentar API REST
 
-            # Método 2: API REST do Firebase (fallback)
+            # Método 2: API REST do Firebase (SEMPRE funciona, mesmo sem Firebase Admin)
+            logger.info("🔄 Usando API REST do Firebase para verificar token...")
             user_info = self._verify_with_rest_api(token)
             if user_info:
                 return user_info
@@ -87,8 +103,9 @@ class AuthManager:
             return None
 
     def _verify_with_rest_api(self, token: str) -> Optional[Dict[str, Any]]:
-        """Verificar token usando API REST do Firebase"""
+        """Verificar token usando API REST do Firebase - CORREÇÃO: Logs mais detalhados"""
         try:
+            logger.info(f"🌐 Verificando token via API REST...")
             url = f"https://identitytoolkit.googleapis.com/v1/accounts:lookup?key={self.api_key}"
             
             response = requests.post(url, json={'idToken': token}, timeout=10)
@@ -97,18 +114,47 @@ class AuthManager:
                 data = response.json()
                 if data.get('users') and len(data['users']) > 0:
                     user = data['users'][0]
+                    logger.info(f"✅ Token verificado via API REST: {user.get('email')}")
                     return self._extract_user_info_from_rest(user, "API REST")
             
-            logger.warning(f"API REST rejeitou o token: {response.status_code}")
+            logger.warning(f"❌ API REST rejeitou o token: HTTP {response.status_code}")
             return None
             
         except requests.RequestException as e:
-            logger.warning(f"Erro de rede na API REST: {e}")
+            logger.warning(f"🌐 Erro de rede na API REST: {e}")
             return None
         except Exception as e:
-            logger.error(f"Erro inesperado na API REST: {e}")
+            logger.error(f"❌ Erro inesperado na API REST: {e}")
             return None
 
+    # 🔥 CORREÇÃO: Adicionar método para debug do secret file
+    def debug_firebase_init(self):
+        """Debug para verificar inicialização do Firebase"""
+        logger.info("🔍 Debug Firebase Initialization:")
+        logger.info(f"   Firebase App: {self.firebase_app}")
+        logger.info(f"   Firebase Apps: {firebase_admin._apps}")
+        
+        # Verificar secret file
+        secret_path = '/etc/secrets/firebase_credentials.json'
+        logger.info(f"   Secret file exists: {os.path.exists(secret_path)}")
+        if os.path.exists(secret_path):
+            try:
+                size = os.path.getsize(secret_path)
+                logger.info(f"   Secret file size: {size} bytes")
+            except:
+                logger.info(f"   Could not get secret file size")
+
+    # 🔥 CORREÇÃO: Adicionar método para verificar status
+    def get_firebase_status(self) -> Dict[str, Any]:
+        """Retorna status do Firebase para debugging"""
+        return {
+            'firebase_app_initialized': self.firebase_app is not None,
+            'firebase_apps_count': len(firebase_admin._apps) if hasattr(firebase_admin, '_apps') else 0,
+            'secret_file_exists': os.path.exists('/etc/secrets/firebase_credentials.json'),
+            'service_account_env': 'FIREBASE_SERVICE_ACCOUNT' in os.environ
+        }
+
+    # 🎯 MANTER TODOS OS OUTROS MÉTODOS EXATAMENTE COMO ESTÃO NO CÓDIGO ATUAL
     def _extract_user_info_from_token(self, decoded_token: Dict, method: str) -> Dict[str, Any]:
         """Extrair informações do usuário do token decodificado"""
         user_info = {
@@ -137,7 +183,7 @@ class AuthManager:
         logger.info(f"✅ Token verificado via {method}: {user_info['email']}")
         return user_info
 
-    # NOVOS MÉTODOS PARA AUTENTICAÇÃO COMPLETA
+    # MANTER TODOS OS OUTROS MÉTODOS EXATAMENTE COMO ESTÃO
     def create_user_with_email_password(self, email: str, password: str, display_name: str = None) -> Dict[str, Any]:
         """Criar usuário com email e senha"""
         try:
