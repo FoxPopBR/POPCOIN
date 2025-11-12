@@ -36,11 +36,13 @@
             <h2>🎉 Bem-vindo de volta!</h2>
             <p>Seu império aguarda por você. Continue sua jornada!</p>
             <div class="action-buttons">
-                <a href="{{ url_for('game') }}" class="btn btn-primary btn-large">
-                    🎮 Continuar Jogando
+                <!-- ✅ CORREÇÃO: Mudar de /game para /profile como ação principal -->
+                <a href="{{ url_for('profile') }}" class="btn btn-primary btn-large">
+                    👤 Ir para Meu Perfil
                 </a>
-                <a href="{{ url_for('profile') }}" class="btn btn-secondary">
-                    👤 Meu Perfil
+                <!-- ✅ CORREÇÃO: Manter jogo como ação secundária -->
+                <a href="{{ url_for('game') }}" class="btn btn-secondary">
+                    🎮 Continuar Jogando
                 </a>
             </div>
         </div>

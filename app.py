@@ -2,7 +2,7 @@ import os
 import json
 import time
 import logging
-import urllib.parse  # <--- ADICIONAR ESTA LINHA
+import urllib.parse
 from datetime import timedelta, datetime
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 
@@ -62,10 +62,11 @@ def index():
     user_info = session.get('user')
     logger.info(f"🏠 Página inicial - Sessão: {user_info}")
     
-    # Se usuário já está autenticado, redirecionar para o jogo
-    if user_info:
-        logger.info("🔄 Usuário autenticado na página inicial, redirecionando...")
-        return redirect('/game')
+    # ✅ CORREÇÃO 1: REMOVIDO redirecionamento automático para /game
+    # O frontend agora decide para onde navegar baseado no estado de autenticação
+    # if user_info:
+    #     logger.info("🔄 Usuário autenticado na página inicial, redirecionando...")
+    #     return redirect('/game')  # ❌ LINHA REMOVIDA
     
     return render_template('index.html', firebase_config=FIREBASE_CONFIG)
 
@@ -75,21 +76,45 @@ def game():
     user_info = session.get('user')
     logger.info(f"🎮 Página do jogo - Sessão: {user_info}")
     
+    # ✅ CORREÇÃO 2: Verificação mais rigorosa de autenticação
     if not user_info:
         logger.warning("❌ Usuário não autenticado, redirecionando para index")
         return redirect('/')
+    
+    # ✅ CORREÇÃO 3: Verificação de tempo de sessão (7 dias)
+    if user_info.get('last_login'):
+        try:
+            last_login = datetime.fromisoformat(user_info['last_login'])
+            if (datetime.now() - last_login).days > 7:
+                logger.warning("🕐 Sessão expirada, redirecionando para index")
+                session.clear()
+                return redirect('/')
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao verificar tempo de sessão: {e}")
+            # Em caso de erro, mantém a sessão (fallback)
     
     return render_template('game.html', firebase_config=FIREBASE_CONFIG)
 
 @app.route('/profile')
 def profile():
-    """Página de perfil do usuário"""
+    """Página de perfil do usuário - AGORA PÁGINA PRINCIPAL PÓS-LOGIN"""
     user_info = session.get('user')
     logger.info(f"👤 Página de perfil - Sessão: {user_info}")
     
     if not user_info:
         logger.warning("❌ Usuário não autenticado, redirecionando para index")
         return redirect('/')
+    
+    # ✅ CORREÇÃO 4: Aplicar mesma verificação de tempo de sessão que em /game
+    if user_info.get('last_login'):
+        try:
+            last_login = datetime.fromisoformat(user_info['last_login'])
+            if (datetime.now() - last_login).days > 7:
+                logger.warning("🕐 Sessão expirada, redirecionando para index")
+                session.clear()
+                return redirect('/')
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao verificar tempo de sessão: {e}")
     
     return render_template('profile.html', firebase_config=FIREBASE_CONFIG)
 
@@ -162,7 +187,7 @@ def auth_login():
                 'picture': user_info.get('picture'),
                 'email_verified': user_info.get('email_verified', False),
                 'created_at': datetime.now().isoformat(),
-                'last_login': datetime.now().isoformat(),
+                'last_login': datetime.now().isoformat(),  # ✅ Atualizar last_login
                 'game_data': {
                     'popcoins': 0,
                     'clicks': 0,
@@ -182,6 +207,8 @@ def auth_login():
                     existing_data = db_manager.get_user_data(user_info['uid'])
                     if existing_data:
                         session_user_data.update(existing_data)
+                        # ✅ Atualizar last_login mesmo para usuários existentes
+                        session_user_data['last_login'] = datetime.now().isoformat()
                         logger.info(f"✅ Dados existentes carregados para: {user_info['uid']}")
                 except Exception as db_error:
                     logger.warning(f"⚠️ Erro ao carregar dados do usuário: {db_error}")
@@ -289,7 +316,7 @@ def user_sync():
             'name': user_info.get('name', session_user.get('name')),
             'picture': user_info.get('picture', session_user.get('picture')),
             'email_verified': user_info.get('email_verified', session_user.get('email_verified', False)),
-            'last_login': datetime.now().isoformat()
+            'last_login': datetime.now().isoformat()  # ✅ Atualizar last_login na sincronização
         })
         
         session['user'] = session_user
@@ -394,7 +421,7 @@ def user_create():
             'picture': data.get('photo_url', user_info.get('picture')),
             'email_verified': user_info.get('email_verified', False),
             'created_at': datetime.now().isoformat(),
-            'last_login': datetime.now().isoformat(),
+            'last_login': datetime.now().isoformat(),  # ✅ Incluir last_login
             'game_data': {
                 'popcoins': 0,
                 'clicks': 0,

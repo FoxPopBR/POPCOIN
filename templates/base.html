@@ -173,7 +173,8 @@
                         <a href="{{ url_for('index') }}" class="nav-link {% if request.endpoint == 'index' %}active{% endif %}">
                             🏠 Início
                         </a>
-                        <a href="{{ url_for('game') }}" class="nav-link {% if request.endpoint == 'game' %}active{% endif %}" id="game-link">
+                        <!-- ✅ CORREÇÃO: Mostrar link do jogo apenas se autenticado -->
+                        <a href="{{ url_for('game') }}" class="nav-link {% if request.endpoint == 'game' %}active{% endif %} hidden" id="game-link">
                             🎮 Jogar
                         </a>
                         <a href="{{ url_for('profile') }}" class="nav-link {% if request.endpoint == 'profile' %}active{% endif %} hidden" id="profile-link">
@@ -186,11 +187,7 @@
                     </button>
                     
                     <div id="auth-section">
-                        <!-- Loading durante verificação -->
-                        <div id="auth-loading" class="auth-loading">
-                            <div class="loading-spinner"></div>
-                            <span>Verificando login...</span>
-                        </div>
+                        <!-- ✅ CORREÇÃO: Removido o auth-loading duplicado. Agora usamos apenas o global loading -->
                         
                         <!-- Usuário logado -->
                         <div id="user-info" class="hidden user-info">
@@ -291,20 +288,22 @@
                 }
             };
 
-            // Atualizar navegação baseada no estado de autenticação
+            // ✅ CORREÇÃO: Atualizar navegação baseada no estado de autenticação
             function updateNavigation(isAuthenticated) {
                 const profileLink = document.getElementById('profile-link');
                 const gameLink = document.getElementById('game-link');
                 const headerProfileLink = document.getElementById('header-profile-link');
                 
                 if (isAuthenticated) {
+                    // Mostrar links para perfil e jogo
                     if (profileLink) profileLink.classList.remove('hidden');
+                    if (gameLink) gameLink.classList.remove('hidden');
                     if (headerProfileLink) headerProfileLink.style.display = 'block';
-                    if (gameLink) gameLink.style.display = 'block';
                 } else {
+                    // Ocultar links para perfil e jogo
                     if (profileLink) profileLink.classList.add('hidden');
+                    if (gameLink) gameLink.classList.add('hidden');
                     if (headerProfileLink) headerProfileLink.style.display = 'none';
-                    // Game link ainda visível, mas pode redirecionar para login
                 }
             }
 

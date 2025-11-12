@@ -9,6 +9,7 @@
             <div class="game-title">
                 <h1>👤 Meu Perfil</h1>
                 <div class="profile-actions">
+                    <!-- ✅ CORREÇÃO: Link para o jogo mantido (agora do perfil para jogo está correto) -->
                     <a href="{{ url_for('game') }}" class="btn btn-secondary">
                         🎮 Voltar ao Jogo
                     </a>
@@ -237,6 +238,15 @@
         </div>
     </div>
 </div>
+
+<!-- ✅ CORREÇÃO: Adicionado loading overlay específico para o perfil -->
+<div id="profile-loading-overlay" class="loading-overlay" style="display: none;">
+    <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <h3>Carregando perfil...</h3>
+        <p>Aguarde enquanto carregamos suas informações</p>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -250,20 +260,38 @@ class ProfileManager {
 
     async init() {
         console.log('👤 Inicializando ProfileManager...');
+        
+        // ✅ CORREÇÃO: Verificação mais robusta de autenticação
+        if (!await this.checkAuthentication()) {
+            return;
+        }
+        
         await this.loadProfile();
         this.setupEventListeners();
         this.startAutoRefresh();
     }
 
+    async checkAuthentication() {
+        // ✅ CORREÇÃO: Verificação mais robusta com timeout
+        let attempts = 0;
+        while (!window.authManager && attempts < 30) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+
+        if (!window.authManager || !window.authManager.isAuthenticated) {
+            this.showMessage('Você precisa estar logado para acessar esta página', 'error');
+            setTimeout(() => window.location.href = '/', 2000);
+            return false;
+        }
+        
+        return true;
+    }
+
     async loadProfile() {
         try {
             console.log('📥 Carregando perfil do usuário...');
-            
-            if (!window.authManager || !window.authManager.isAuthenticated) {
-                this.showMessage('Você precisa estar logado para acessar esta página', 'error');
-                setTimeout(() => window.location.href = '/', 2000);
-                return;
-            }
+            this.showProfileLoading(true);
 
             const token = await window.authManager.getAuthToken();
             if (!token) {
@@ -276,18 +304,46 @@ class ProfileManager {
                 }
             });
 
-            if (response.ok) {
-                const data = await response.json();
+            if (response.status === 401) {
+                // ✅ CORREÇÃO: Sessão expirada - redirecionar
+                this.showMessage('Sessão expirada. Redirecionando...', 'error');
+                setTimeout(() => window.location.href = '/', 2000);
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            if (data.success) {
                 this.userProfile = data.profile;
-                this.originalData = JSON.parse(JSON.stringify(this.userProfile)); // Deep copy
+                this.originalData = JSON.parse(JSON.stringify(this.userProfile));
                 this.updateProfileUI();
                 console.log('✅ Perfil carregado com sucesso');
             } else {
-                throw new Error('Erro ao carregar perfil');
+                throw new Error(data.error || 'Erro ao carregar perfil');
             }
         } catch (error) {
             console.error('❌ Erro ao carregar perfil:', error);
+            
+            if (error.message.includes("autenticado") || error.message.includes("autorizado")) {
+                this.showMessage('Sessão expirada. Redirecionando...', 'error');
+                setTimeout(() => window.location.href = '/', 2000);
+                return;
+            }
+            
             this.showMessage('Erro ao carregar perfil: ' + error.message, 'error');
+        } finally {
+            this.showProfileLoading(false);
+        }
+    }
+
+    showProfileLoading(show) {
+        const loadingOverlay = document.getElementById('profile-loading-overlay');
+        if (loadingOverlay) {
+            loadingOverlay.style.display = show ? 'flex' : 'none';
         }
     }
 
@@ -352,7 +408,7 @@ class ProfileManager {
     }
 
     updateLevelProgress(exp, level) {
-        const expNeeded = level * 100; // Fórmula simples: 100 EXP por nível
+        const expNeeded = level * 100;
         const progress = Math.min((exp / expNeeded) * 100, 100);
         
         document.getElementById('level-progress').style.width = progress + '%';
@@ -392,6 +448,8 @@ class ProfileManager {
         ];
 
         const achievementsList = document.getElementById('profile-achievements');
+        if (!achievementsList) return;
+        
         achievementsList.innerHTML = '';
 
         achievements.forEach(achievement => {
@@ -410,6 +468,8 @@ class ProfileManager {
 
     async updateProfile() {
         try {
+            this.showProfileLoading(true);
+            
             const token = await window.authManager.getAuthToken();
             if (!token) {
                 this.showMessage('Erro de autenticação', 'error');
@@ -442,25 +502,35 @@ class ProfileManager {
             });
 
             if (response.ok) {
-                this.showMessage('Perfil atualizado com sucesso!', 'success');
-                this.originalData = JSON.parse(JSON.stringify(this.userProfile));
-                await this.loadProfile(); // Recarregar dados
+                const result = await response.json();
+                if (result.success) {
+                    this.showMessage('Perfil atualizado com sucesso!', 'success');
+                    this.userProfile = result.profile;
+                    this.originalData = JSON.parse(JSON.stringify(this.userProfile));
+                } else {
+                    throw new Error(result.error || 'Erro ao atualizar perfil');
+                }
             } else {
-                throw new Error('Erro ao atualizar perfil');
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
         } catch (error) {
             console.error('❌ Erro ao atualizar perfil:', error);
             this.showMessage('Erro ao atualizar perfil: ' + error.message, 'error');
+        } finally {
+            this.showProfileLoading(false);
         }
     }
 
     setupEventListeners() {
         // Salvar ao pressionar Enter no nome
-        document.getElementById('profile-name').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.updateProfile();
-            }
-        });
+        const profileName = document.getElementById('profile-name');
+        if (profileName) {
+            profileName.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.updateProfile();
+                }
+            });
+        }
 
         // Detectar mudanças nos formulários
         const inputs = document.querySelectorAll('.profile-input, input[type="checkbox"]');
@@ -478,7 +548,9 @@ class ProfileManager {
     startAutoRefresh() {
         // Atualizar estatísticas a cada 30 segundos
         setInterval(() => {
-            this.loadProfile();
+            if (this.userProfile) {
+                this.loadProfile();
+            }
         }, 30000);
     }
 
@@ -492,7 +564,16 @@ class ProfileManager {
     }
 
     showMessage(message, type = 'info') {
+        // Usar o sistema de mensagens do authManager se disponível
+        if (window.authManager && window.authManager.showMessage) {
+            window.authManager.showMessage(message, type);
+            return;
+        }
+        
+        // Fallback: sistema próprio de mensagens
         const messageDiv = document.getElementById('profile-messages');
+        if (!messageDiv) return;
+        
         const messageEl = document.createElement('div');
         messageEl.className = `message message-${type}`;
         messageEl.textContent = message;
@@ -547,7 +628,6 @@ function resetPreferences() {
 }
 
 function changeAvatar() {
-    // Implementação futura para upload de avatar
     alert('Funcionalidade de upload de avatar em desenvolvimento!');
 }
 
@@ -579,20 +659,39 @@ function deleteAccount() {
     }
 }
 
-// Inicializar quando o DOM estiver pronto
+// ✅ CORREÇÃO: Inicialização melhorada com verificação de autenticação
 document.addEventListener('DOMContentLoaded', function() {
     console.log('👤 Inicializando página de perfil...');
     
-    // Verificar se o usuário está autenticado
-    if (window.authManager && window.authManager.isAuthenticated) {
-        window.profileManager = new ProfileManager();
-    } else {
-        // Redirecionar para login se não estiver autenticado
-        console.log('❌ Usuário não autenticado, redirecionando...');
-        setTimeout(() => {
-            window.location.href = '/';
-        }, 1000);
-    }
+    // Aguardar o authManager estar disponível
+    const initProfileManager = async () => {
+        let attempts = 0;
+        while (!window.authManager && attempts < 50) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+        
+        if (window.authManager && window.authManager.isAuthenticated) {
+            window.profileManager = new ProfileManager();
+        } else {
+            console.log('❌ Usuário não autenticado, redirecionando...');
+            // Mostrar mensagem e redirecionar
+            const messageDiv = document.getElementById('profile-messages');
+            if (messageDiv) {
+                messageDiv.innerHTML = `
+                    <div style="padding: 20px; text-align: center; background: #dc3545; color: white; border-radius: 8px;">
+                        <h3>❌ Acesso não autorizado</h3>
+                        <p>Redirecionando para a página inicial...</p>
+                    </div>
+                `;
+            }
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 2000);
+        }
+    };
+    
+    initProfileManager();
 });
 </script>
 
@@ -913,6 +1012,41 @@ document.addEventListener('DOMContentLoaded', function() {
 .btn-small {
     padding: 0.5rem 1rem;
     font-size: 0.9rem;
+}
+
+/* Loading overlay específico para o perfil */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9998;
+}
+
+.loading-content {
+    text-align: center;
+    max-width: 400px;
+}
+
+.loading-spinner {
+    border: 4px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    border-top: 4px solid white;
+    width: 60px;
+    height: 60px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 2rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 /* Responsividade */
