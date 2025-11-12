@@ -2,6 +2,7 @@ import os
 import json
 import time
 import logging
+import urllib.parse  # <--- ADICIONAR ESTA LINHA
 from datetime import timedelta, datetime
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 
