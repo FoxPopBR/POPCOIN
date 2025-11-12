@@ -1,4 +1,3 @@
-# database/db_models.py - VERSÃO CORRIGIDA E OTIMIZADA
 import os
 import psycopg2
 import json
@@ -18,10 +17,11 @@ connection_pool = None
 pool_lock = threading.Lock()
 
 class DatabaseManager:
-    """Gerenciador de banco de dados para o PopCoin IDLE"""
+    """Gerenciador de banco de dados para o PopCoin IDLE - VERSÃO ATUALIZADA"""
     
     def __init__(self):
         self.initialized = False
+        self.database_url = os.environ.get('DATABASE_URL')
         self.init_db()
     
     def get_db_connection(self):
@@ -29,7 +29,6 @@ class DatabaseManager:
         global connection_pool
         
         try:
-            # Tentar usar o pool primeiro
             if connection_pool:
                 conn = connection_pool.getconn()
                 if conn and not conn.closed:
@@ -37,7 +36,6 @@ class DatabaseManager:
         except Exception as e:
             logger.warning(f"⚠️ Erro ao obter conexão do pool: {e}")
         
-        # Fallback: conexão direta
         return self.create_direct_connection()
 
     def return_db_connection(self, conn):
@@ -52,93 +50,66 @@ class DatabaseManager:
                 conn.close()
 
     def create_direct_connection(self):
-        """Cria conexão direta com PostgreSQL - CORREÇÃO SSL ROBUSTA"""
-        database_url = os.environ.get('DATABASE_URL')
-
-        if not database_url:
-            logger.error("❌ DATABASE_URL não encontrada - Modo desenvolvimento")
+        """Cria conexão direta com PostgreSQL - CORREÇÃO PARA NOVO BANCO"""
+        if not self.database_url:
+            logger.error("❌ DATABASE_URL não encontrada")
             return None
 
         try:
-            # Parse da URL para debugging seguro
-            parsed_url = urllib.parse.urlparse(database_url)
-            safe_url = f"{parsed_url.scheme}://{parsed_url.hostname}:{parsed_url.port}{parsed_url.path}"
-            logger.info(f"🔗 Tentando conexão com: {safe_url}")
+            # Parse da URL para verificar configurações
+            parsed_url = urllib.parse.urlparse(self.database_url)
+            logger.info(f"🔗 Conectando à: {parsed_url.hostname} | DB: {parsed_url.path[1:]}")
 
-            # CORREÇÃO: Converter postgres:// para postgresql://
+            # CORREÇÃO: Converter postgres:// para postgresql:// se necessário
+            database_url = self.database_url
             if database_url.startswith('postgres://'):
                 database_url = database_url.replace('postgres://', 'postgresql://')
 
-            # Tentar diferentes estratégias de conexão SSL
-            connection_attempts = [
-                # Tentativa 1: SSL requerido (modo padrão para Render)
-                {'sslmode': 'require', 'description': 'SSL requerido'},
-                # Tentativa 2: SSL preferido (mais tolerante)
-                {'sslmode': 'prefer', 'description': 'SSL preferido'},
-                # Tentativa 3: Sem SSL (apenas para debug)
-                {'sslmode': 'disable', 'description': 'Sem SSL'}
-            ]
+            # Tentar conexão com SSL (Requerido pelo Render)
+            conn = psycopg2.connect(
+                dsn=database_url,
+                connect_timeout=15,
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5,
+                sslmode='require'  # Render requer SSL
+            )
 
-            for attempt in connection_attempts:
-                try:
-                    logger.info(f"🔒 Tentativa: {attempt['description']}")
-                    
-                    # Criar string de conexão com parâmetros SSL
-                    if '?' in database_url:
-                        attempt_url = f"{database_url}&sslmode={attempt['sslmode']}"
-                    else:
-                        attempt_url = f"{database_url}?sslmode={attempt['sslmode']}"
-                    
-                    conn = psycopg2.connect(
-                        dsn=attempt_url,
-                        connect_timeout=15,
-                        keepalives=1,
-                        keepalives_idle=30,
-                        keepalives_interval=10,
-                        keepalives_count=5,
-                    )
-
-                    # Testar a conexão
-                    with conn.cursor() as cur:
-                        cur.execute("SELECT version();")
-                        result = cur.fetchone()
-                    
-                    logger.info(f"✅ {attempt['description']} - Conexão bem-sucedida!")
-                    logger.info(f"📊 PostgreSQL: {result[0].split(',')[0] if result else 'Unknown'}")
-                    return conn
-
-                except Exception as e:
-                    logger.warning(f"⚠️ {attempt['description']} falhou: {str(e)[:100]}...")
-                    continue
-
-            logger.error("❌ Todas as tentativas de conexão falharam")
-            return None
+            # Testar conexão
+            with conn.cursor() as cur:
+                cur.execute("SELECT current_database(), version();")
+                result = cur.fetchone()
+                db_name = result[0] if result else 'Unknown'
+                db_version = result[1].split(',')[0] if result else 'Unknown'
+                
+            logger.info(f"✅ Conectado ao banco: {db_name}")
+            logger.info(f"📊 {db_version}")
+            return conn
 
         except Exception as e:
-            logger.error(f"❌ Erro crítico na conexão: {e}")
+            logger.error(f"❌ Erro na conexão com novo banco: {e}")
             return None
 
     def init_db(self):
         """Inicializa o banco de dados e pool de conexões"""
         global connection_pool
         
-        # Evitar inicialização múltipla
         if self.initialized:
             return
             
-        logger.info("🔄 Iniciando inicialização do banco...")
-        database_url = os.environ.get('DATABASE_URL')
+        logger.info("🔄 Iniciando inicialização do novo banco...")
         
-        if not database_url:
-            logger.error("❌ DATABASE_URL não encontrada - Modo desenvolvimento sem banco")
-            self.initialized = True  # Marcar como inicializado mesmo sem banco
+        if not self.database_url:
+            logger.error("❌ DATABASE_URL não encontrada - Modo desenvolvimento")
+            self.initialized = True
             return
         
         try:
             # Testar conexão primeiro
             test_conn = self.create_direct_connection()
             if not test_conn:
-                logger.error("❌ Não foi possível conectar ao banco - Modo desenvolvimento")
+                logger.error("❌ Não foi possível conectar ao novo banco")
                 self.initialized = True
                 return
                 
@@ -146,23 +117,22 @@ class DatabaseManager:
             
             # Criar pool de conexões
             with pool_lock:
+                # CORREÇÃO: Usar a URL já formatada corretamente
                 connection_pool = pool.SimpleConnectionPool(
-                    1,  # min connections
-                    10, # max connections
-                    dsn=database_url,
+                    1, 10,  # min, max connections
+                    dsn=self.database_url,
                     connect_timeout=10,
                     keepalives=1,
                     keepalives_idle=30
                 )
-            logger.info("✅ Pool de conexões PostgreSQL criado!")
+            logger.info("✅ Pool de conexões criado para novo banco!")
             
             # Criar tabelas
             self.create_tables()
             self.initialized = True
             
         except Exception as e:
-            logger.error(f"❌ Erro na inicialização do banco: {e}")
-            # Marcar como inicializado mesmo com erro para permitir fallback
+            logger.error(f"❌ Erro na inicialização do novo banco: {e}")
             self.initialized = True
 
     def create_tables(self):
