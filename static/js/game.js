@@ -46,34 +46,77 @@ class PopCoinGame {
     }
 
     async checkAuthentication() {
-        // ✅ CORREÇÃO: Verificação mais robusta com timeout
+        console.log("🔐 Verificando autenticação...");
+        
+        // ✅ CORREÇÃO: Esperar de forma mais robusta pelo authManager
         let attempts = 0;
-        while (!window.authManager && attempts < 50) {
+        const maxAttempts = 30; // 3 segundos no total
+        
+        while ((!window.authManager || !window.authManager.isAuthChecked) && attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 100));
             attempts++;
         }
 
+        // ✅ VERIFICAÇÃO 1: AuthManager carregado?
         if (!window.authManager) {
-            console.error("❌ AuthManager não carregado");
-            this.showMessage("Erro de autenticação. Redirecionando...", "error");
-            setTimeout(() => window.location.href = '/', 2000);
+            console.error("❌ AuthManager não carregado após", attempts, "tentativas");
+            this.showMessage("Sistema de autenticação não carregado. Recarregando...", "error");
+            setTimeout(() => window.location.reload(), 2000);
             return false;
         }
 
-        // Aguardar verificação de autenticação
-        let authCheckAttempts = 0;
-        while (!window.authManager.authChecked && authCheckAttempts < 50) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            authCheckAttempts++;
+        // ✅ VERIFICAÇÃO 2: Método existe?
+        if (typeof window.authManager.isUserAuthenticated !== 'function') {
+            console.error("❌ Método isUserAuthenticated não encontrado");
+            console.log("🔍 AuthManager methods:", Object.keys(window.authManager));
+            
+            // Fallback: verificar via API
+            try {
+                const response = await fetch('/api/auth/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.authenticated) {
+                        console.log("✅ Usuário autenticado (fallback API)");
+                        return true;
+                    }
+                }
+            } catch (error) {
+                console.error("❌ Erro no fallback:", error);
+            }
+            
+            this.showMessage("Problema de autenticação. Redirecionando...", "error");
+            setTimeout(() => window.location.href = '/', 3000);
+            return false;
         }
-        
+
+        // ✅ VERIFICAÇÃO 3: Usuário autenticado?
         if (!window.authManager.isUserAuthenticated()) {
-            console.log("❌ Usuário não autenticado, redirecionando...");
-            this.showMessage("Você precisa estar logado para jogar. Redirecionando...", "error");
+            console.log("❌ Usuário não autenticado via AuthManager");
+            
+            // Verificação final via API como fallback
+            try {
+                const response = await fetch('/api/auth/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (!data.authenticated) {
+                        this.showMessage("Você precisa estar logado para jogar. Redirecionando...", "error");
+                        setTimeout(() => window.location.href = '/', 2000);
+                        return false;
+                    } else {
+                        console.log("✅ Usuário autenticado (API confirmou)");
+                        return true;
+                    }
+                }
+            } catch (error) {
+                console.error("❌ Erro na verificação final:", error);
+            }
+            
+            this.showMessage("Sessão inválida. Redirecionando...", "error");
             setTimeout(() => window.location.href = '/', 2000);
             return false;
         }
 
+        console.log("✅ Autenticação verificada com sucesso");
         return true;
     }
 
@@ -660,23 +703,52 @@ class PopCoinGame {
 let game;
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🎮 Inicializando PopCoin Game...');
+    console.log('🎮 DOM carregado, preparando inicialização do jogo...');
     
     const initGame = async () => {
+        console.log('🔧 Iniciando processo de inicialização do jogo...');
+        
+        // ✅ ESPERAR pelo AuthManager estar pronto
         let attempts = 0;
-        while (!window.authManager && attempts < 50) {
+        while ((!window.authManager || !window.authManager.isAuthChecked) && attempts < 50) {
             await new Promise(resolve => setTimeout(resolve, 100));
             attempts++;
         }
         
-        if (window.authManager && window.authManager.isUserAuthenticated()) {
+        console.log('🔍 Estado do AuthManager:', {
+            exists: !!window.authManager,
+            authChecked: window.authManager?.isAuthChecked?.(),
+            isAuthenticated: window.authManager?.isUserAuthenticated?.(),
+            attempts: attempts
+        });
+        
+        if (window.authManager && window.authManager.isUserAuthenticated && 
+            window.authManager.isUserAuthenticated()) {
+            console.log('🎮 Iniciando jogo para usuário autenticado...');
             game = new PopCoinGame();
         } else {
-            console.log('❌ Usuário não autenticado, jogo não iniciado');
+            console.log('❌ Usuário não autenticado ou AuthManager não pronto');
+            
+            // Mostrar mensagem amigável
+            const loadingOverlay = document.getElementById('game-loading-overlay');
+            if (loadingOverlay) {
+                loadingOverlay.innerHTML = `
+                    <div class="loading-message">
+                        <h3>🔒 Acesso Restrito</h3>
+                        <p>Você precisa estar logado para acessar o jogo.</p>
+                        <p>Redirecionando para a página inicial...</p>
+                    </div>
+                `;
+            }
+            
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 3000);
         }
     };
     
-    initGame();
+    // Iniciar com pequeno delay para garantir que tudo carregou
+    setTimeout(initGame, 500);
 });
 
 // Adicionar estilos CSS para animações
@@ -754,6 +826,27 @@ style.textContent = `
             padding: 0.5rem 0.75rem !important;
             font-size: 0.8rem;
         }
+    }
+    
+    .loading-message {
+        text-align: center;
+        padding: 2rem;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        margin: 2rem auto;
+        max-width: 400px;
+        color: #333;
+    }
+    
+    .loading-message h3 {
+        color: #dc3545;
+        margin-bottom: 1rem;
+    }
+    
+    .loading-message p {
+        margin: 0.5rem 0;
+        color: #666;
     }
 `;
 document.head.appendChild(style);

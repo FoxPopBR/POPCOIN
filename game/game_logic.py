@@ -1,4 +1,4 @@
-# game/game_logic.py - VERSÃO CORRIGIDA E ALINHADA
+# game/game_logic.py - VERSÃO COMPLETAMENTE CORRIGIDA
 import json
 import time
 import logging
@@ -10,436 +10,349 @@ logger = logging.getLogger(__name__)
 
 class GameManager:
     def __init__(self):
-        # ✅ CORREÇÃO: Estado padrão completamente alinhado com banco e frontend
+        # ✅ CORREÇÃO: Estado padrão completamente alinhado e balanceado
         self.default_game_state = {
-            "popcoins": 0,
-            "clicks": 0,
-            "level": 1,
-            "experience": 0,
+            "coins": 0,  # ✅ CORREÇÃO: Usar 'coins' em vez de 'popcoins' para consistência
             "coins_per_click": 1,
             "coins_per_second": 0,
             "total_coins": 0,
             "prestige_level": 0,
             "upgrades": {
-                "click_power": 1,
-                "auto_clicker": 0,
-                "auto_clickers": 0,
+                "click_power": 1,      # ✅ CORREÇÃO: Nomes padronizados
+                "auto_clickers": 0,    # ✅ CORREÇÃO: Somente um tipo de auto_clickers
                 "click_bots": 0
             },
+            "click_count": 0,          # ✅ CORREÇÃO: click_count em vez de clicks
+            "level": 1,
+            "experience": 0,
             "inventory": [],
             "achievements": [],
             "last_update": time.time()
         }
         
-        logger.info("✅ GameManager inicializado com estado padrão alinhado")
-    
+        # ✅ CORREÇÃO: Sistema de balanceamento
+        self.upgrade_config = {
+            "click_power": {
+                "base_cost": 50,       # ✅ CORREÇÃO: Custo aumentado para balanceamento
+                "cost_multiplier": 1.8,
+                "effect_per_level": 1,  # +1 coin por clique por nível
+                "description": "Aumenta moedas por clique"
+            },
+            "auto_clickers": {
+                "base_cost": 100,      # ✅ CORREÇÃO: Custo balanceado
+                "cost_multiplier": 2.0,
+                "effect_per_level": 0.2,  # 0.2 coins por segundo por nível
+                "description": "Gera moedas automaticamente"
+            },
+            "click_bots": {
+                "base_cost": 500,      # ✅ CORREÇÃO: Custo balanceado
+                "cost_multiplier": 2.5,
+                "effect_per_level": 1.0,  # 1.0 coin por segundo por nível
+                "description": "Bots avançados que geram mais moedas"
+            }
+        }
+        
+        logger.info("✅ GameManager inicializado com sistema balanceado")
+
     def get_user_game_state(self, user_id: str) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Recupera estado completamente alinhado"""
+        """✅ CORREÇÃO: Sistema robusto de carregamento de estado"""
         try:
-            # ✅ CORREÇÃO: Tentar banco primeiro, depois fallback
+            # ✅ CORREÇÃO: Tentar banco primeiro
             from database.db_models import get_database_manager
             db_manager = get_database_manager()
             
+            game_state = None
+            
             if db_manager and db_manager.initialized:
                 try:
-                    # ✅ CORREÇÃO: Usar get_user_data que já inclui game_data
                     user_data = db_manager.get_user_data(user_id)
                     if user_data and user_data.get('game_data'):
                         game_state = user_data['game_data']
+                        # ✅ CORREÇÃO: Garantir estrutura correta
+                        game_state = self._ensure_game_state_structure(game_state)
                         game_state = self.calculate_offline_earnings(game_state)
-                        logger.info(f"✅ Estado do jogo carregado do banco para: {user_id}")
-                        return game_state
+                        logger.info(f"✅ Estado carregado do banco: {user_id}")
                 except Exception as db_error:
-                    logger.warning(f"⚠️ Erro ao carregar do banco: {db_error}")
+                    logger.warning(f"⚠️ Erro no banco: {db_error}")
 
-            # ✅ CORREÇÃO: Fallback com estado inicial
-            logger.info(f"🆕 Criando estado inicial para usuário: {user_id}")
-            return self.create_initial_game_state(user_id)
+            # ✅ CORREÇÃO: Fallback para estado padrão
+            if not game_state:
+                logger.info(f"🆕 Criando estado inicial para: {user_id}")
+                game_state = self.create_initial_game_state(user_id)
+            
+            return game_state
 
-        except ImportError:
-            logger.warning("⚠️ Database não disponível - usando estado local")
-            return self.default_game_state.copy()
         except Exception as e:
-            logger.error(f"❌ Erro crítico ao buscar estado do jogo: {e}")
+            logger.error(f"❌ Erro ao carregar estado: {e}")
             return self.default_game_state.copy()
 
     def save_game_state(self, user_id: str, game_state: Dict[str, Any]) -> bool:
-        """✅ CORREÇÃO: Salva estado completamente alinhado"""
+        """✅ CORREÇÃO: Sistema robusto de salvamento"""
         try:
-            # ✅ CORREÇÃO: Atualizar timestamp e garantir campos obrigatórios
+            # ✅ CORREÇÃO: Garantir estrutura antes de salvar
+            game_state = self._ensure_game_state_structure(game_state)
             game_state['last_update'] = time.time()
-            self._ensure_required_fields(game_state)
 
-            # ✅ CORREÇÃO: Usar DatabaseManager para salvar
+            # ✅ CORREÇÃO: Salvar via DatabaseManager
             from database.db_models import get_database_manager
             db_manager = get_database_manager()
             
             if db_manager and db_manager.initialized:
                 try:
-                    # ✅ CORREÇÃO: Obter dados atuais do usuário primeiro
-                    current_user_data = db_manager.get_user_data(user_id)
-                    if not current_user_data:
-                        current_user_data = self._create_default_user_data(user_id)
+                    user_data = db_manager.get_user_data(user_id) or {}
+                    user_data['game_data'] = game_state
                     
-                    # ✅ CORREÇÃO: Atualizar apenas game_data
-                    current_user_data['game_data'] = game_state
-                    
-                    if db_manager.save_user_data(user_id, current_user_data):
-                        logger.info(f"💾 Estado do jogo salvo no banco para: {user_id}")
+                    if db_manager.save_user_data(user_id, user_data):
+                        logger.debug(f"💾 Estado salvo no banco: {user_id}")
                         return True
                 except Exception as db_error:
                     logger.warning(f"⚠️ Erro ao salvar no banco: {db_error}")
 
-            # Fallback local
-            logger.info(f"💾 Estado salvo localmente (sem banco): {user_id}")
+            logger.info(f"💾 Estado salvo localmente: {user_id}")
             return True
 
         except Exception as e:
-            logger.error(f"❌ Erro crítico ao salvar estado do jogo: {e}")
+            logger.error(f"❌ Erro ao salvar estado: {e}")
             return False
 
-    def _create_default_user_data(self, user_id: str) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Cria dados de usuário padrão"""
-        return {
-            'uid': user_id,
-            'email': 'unknown@example.com',
-            'name': 'Jogador',
-            'picture': '/static/images/default-avatar.png',
-            'email_verified': False,
-            'created_at': datetime.now().isoformat(),
-            'last_login': datetime.now().isoformat(),
-            'last_activity': datetime.now().isoformat(),
-            'preferences': {
-                'notifications': True,
-                'sound_effects': True,
-                'music': True,
-                'autosave': True
-            },
-            'game_data': self.default_game_state.copy()
-        }
-
-    def _ensure_required_fields(self, game_state: Dict[str, Any]) -> None:
-        """✅ CORREÇÃO: Garante todos os campos obrigatórios com valores padrão"""
-        required_fields = {
-            "popcoins": 0,
-            "clicks": 0,
-            "level": 1,
-            "experience": 0,
-            "coins_per_click": 1,
-            "coins_per_second": 0,
-            "total_coins": 0,
-            "prestige_level": 0,
-            "upgrades": {
-                "click_power": 1,
-                "auto_clicker": 0,
-                "auto_clickers": 0,
-                "click_bots": 0
-            },
-            "inventory": [],
-            "achievements": [],
-            "last_update": time.time()
-        }
+    def _ensure_game_state_structure(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
+        """✅ CORREÇÃO: Garante estrutura consistente do estado do jogo"""
+        default_state = self.default_game_state.copy()
         
-        for field, default_value in required_fields.items():
-            if field not in game_state:
-                game_state[field] = default_value
-            elif field == "upgrades" and isinstance(default_value, dict):
+        # ✅ CORREÇÃO: Mesclar estados mantendo dados existentes
+        for key, default_value in default_state.items():
+            if key not in game_state:
+                game_state[key] = default_value
+            elif key == "upgrades" and isinstance(default_value, dict):
                 # ✅ CORREÇÃO: Garantir todos os upgrades existam
                 for upgrade, upgrade_default in default_value.items():
-                    if upgrade not in game_state[field]:
-                        game_state[field][upgrade] = upgrade_default
+                    if upgrade not in game_state[key]:
+                        game_state[key][upgrade] = upgrade_default
+        
+        # ✅ CORREÇÃO: Garantir campos numéricos são números
+        numeric_fields = ["coins", "coins_per_click", "coins_per_second", "total_coins", 
+                         "click_count", "level", "experience", "prestige_level"]
+        for field in numeric_fields:
+            if field in game_state:
+                try:
+                    game_state[field] = float(game_state[field])
+                except (TypeError, ValueError):
+                    game_state[field] = 0
+        
+        return game_state
 
     def create_initial_game_state(self, user_id: str) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Cria estado inicial completamente alinhado"""
+        """✅ CORREÇÃO: Cria estado inicial balanceado"""
         initial_state = self.default_game_state.copy()
-        
-        # Tentar salvar o estado inicial
         self.save_game_state(user_id, initial_state)
-        
-        logger.info(f"🎮 Estado inicial criado para usuário: {user_id}")
         return initial_state
-    
+
     def calculate_offline_earnings(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Calcula ganhos offline com lógica robusta"""
+        """✅ CORREÇÃO: Sistema de ganhos offline robusto"""
         try:
             current_time = time.time()
             last_update = game_state.get('last_update', current_time)
             
-            # Evitar ganhos negativos (caso o relógio do sistema mude)
+            # ✅ CORREÇÃO: Evitar problemas de tempo
             if last_update > current_time:
                 game_state['last_update'] = current_time
                 return game_state
             
             time_elapsed = current_time - last_update
             
-            # Limitar ganhos offline a 24 horas
-            max_offline_time = 24 * 3600
+            # ✅ CORREÇÃO: Limitar ganhos offline a 12 horas
+            max_offline_time = 12 * 3600
             time_elapsed = min(time_elapsed, max_offline_time)
             
-            # Calcular moedas geradas automaticamente
+            # ✅ CORREÇÃO: Calcular ganhos automáticos
             coins_per_second = game_state.get('coins_per_second', 0)
-            auto_earnings = time_elapsed * coins_per_second
-            
-            if auto_earnings > 0:
-                auto_earnings = int(auto_earnings)  # Converter para inteiro
-                game_state['popcoins'] = game_state.get('popcoins', 0) + auto_earnings
-                game_state['total_coins'] = game_state.get('total_coins', 0) + auto_earnings
+            if coins_per_second > 0 and time_elapsed > 1:  # Pelo menos 1 segundo
+                auto_earnings = time_elapsed * coins_per_second
+                auto_earnings = int(auto_earnings)  # Apenas moedas inteiras
                 
-                logger.info(f"💰 Ganhos offline: {auto_earnings} moedas em {time_elapsed:.0f}s para {game_state.get('popcoins', 0)} total")
+                if auto_earnings > 0:
+                    game_state['coins'] += auto_earnings
+                    game_state['total_coins'] += auto_earnings
+                    
+                    logger.info(f"💰 Ganhos offline: +{auto_earnings} moedas ({time_elapsed:.0f}s)")
             
             game_state['last_update'] = current_time
-            
             return game_state
             
         except Exception as e:
-            logger.error(f"❌ Erro no cálculo de ganhos offline: {e}")
+            logger.error(f"❌ Erro em ganhos offline: {e}")
             game_state['last_update'] = time.time()
             return game_state
-    
+
     def process_click(self, user_id: str) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Processa clique com lógica completa"""
+        """✅ CORREÇÃO: Sistema de clique balanceado"""
         try:
             game_state = self.get_user_game_state(user_id)
             
-            # ✅ CORREÇÃO: Calcular moedas por clique considerando upgrades
-            base_click_power = 1
-            click_power_bonus = game_state['upgrades'].get('click_power', 1) - 1
-            prestige_bonus = game_state.get('prestige_level', 0) * 0.5
-            level_bonus = (game_state.get('level', 1) - 1) * 0.1
+            # ✅ CORREÇÃO: Calcular moedas por clique com bônus
+            base_coins = 1
+            click_power = game_state['upgrades'].get('click_power', 1)
+            prestige_bonus = game_state.get('prestige_level', 0) * 0.1
+            level_bonus = (game_state.get('level', 1) - 1) * 0.05
             
-            coins_per_click = base_click_power + click_power_bonus + prestige_bonus + level_bonus
-            coins_per_click = max(1, int(coins_per_click))  # Garantir pelo menos 1
+            coins_earned = base_coins + (click_power - 1) + prestige_bonus + level_bonus
+            coins_earned = max(1, int(coins_earned))
             
-            # ✅ CORREÇÃO: Adicionar moedas
-            game_state['popcoins'] = game_state.get('popcoins', 0) + coins_per_click
-            game_state['total_coins'] = game_state.get('total_coins', 0) + coins_per_click
-            game_state['clicks'] = game_state.get('clicks', 0) + 1
+            # ✅ CORREÇÃO: Aplicar ganhos
+            game_state['coins'] += coins_earned
+            game_state['total_coins'] += coins_earned
+            game_state['click_count'] += 1
             
-            # Adicionar experiência
-            experience_gained = max(1, coins_per_click)
-            game_state['experience'] = game_state.get('experience', 0) + experience_gained
+            # ✅ CORREÇÃO: Sistema de experiência
+            exp_gained = max(1, coins_earned)
+            game_state['experience'] += exp_gained
             
-            # Verificar level up
-            level_up_occurred = self._check_level_up(game_state)
-            
-            # Verificar conquistas
+            # ✅ CORREÇÃO: Verificar evoluções
+            level_up = self._check_level_up(game_state)
             new_achievements = self._check_achievements(game_state)
             
-            # Atualizar estatísticas baseadas em upgrades
+            # ✅ CORREÇÃO: Atualizar estatísticas
             self._update_game_stats(game_state)
             
-            # Salvar estado atualizado
+            # Salvar
             self.save_game_state(user_id, game_state)
             
-            logger.info(f"👆 Clique processado para {user_id}: +{coins_per_click} popcoins (total: {game_state['popcoins']})")
+            logger.debug(f"👆 Clique: +{coins_earned} moedas (total: {game_state['coins']})")
             
             return {
                 "success": True, 
-                "game_state": game_state,
-                "coins_earned": coins_per_click,
-                "level_up": level_up_occurred,
-                "new_achievements": new_achievements
+                "coins_earned": coins_earned,
+                "level_up": level_up,
+                "new_achievements": new_achievements,
+                "game_state": game_state
             }
             
         except Exception as e:
-            logger.error(f"❌ Erro ao processar clique: {e}")
+            logger.error(f"❌ Erro no clique: {e}")
             return {"success": False, "error": str(e)}
-    
-    def buy_upgrade(self, user_id: str, upgrade_type: str, cost: int = None) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Compra upgrade com custos dinâmicos"""
+
+    def buy_upgrade(self, user_id: str, upgrade_type: str) -> Dict[str, Any]:
+        """✅ CORREÇÃO: Sistema de compra balanceado"""
         try:
+            # ✅ CORREÇÃO: Verificar upgrade válido
+            if upgrade_type not in self.upgrade_config:
+                return {"success": False, "error": "Upgrade inválido"}
+            
             game_state = self.get_user_game_state(user_id)
+            current_level = game_state['upgrades'].get(upgrade_type, 0)
             
-            # ✅ CORREÇÃO: Verificar se upgrade_type é válido
-            valid_upgrades = ['click_power', 'auto_clicker', 'auto_clickers', 'click_bots']
-            if upgrade_type not in valid_upgrades:
-                return {
-                    "success": False, 
-                    "error": f"Tipo de upgrade inválido: {upgrade_type}. Válidos: {valid_upgrades}"
-                }
+            # ✅ CORREÇÃO: Calcular custo usando configuração
+            config = self.upgrade_config[upgrade_type]
+            cost = self._calculate_upgrade_cost(config['base_cost'], config['cost_multiplier'], current_level)
             
-            # ✅ CORREÇÃO: Calcular custo se não fornecido
-            if cost is None:
-                current_level = game_state['upgrades'].get(upgrade_type, 0)
-                base_costs = {
-                    'click_power': 10,
-                    'auto_clicker': 50,
-                    'auto_clickers': 200,
-                    'click_bots': 1000
-                }
-                base_cost = base_costs.get(upgrade_type, 100)
-                cost = self._calculate_upgrade_cost(base_cost, current_level)
-            
-            # ✅ CORREÇÃO: Verificar popcoins suficientes
-            if game_state['popcoins'] >= cost:
-                # Deduzir custo
-                game_state['popcoins'] -= cost
+            # ✅ CORREÇÃO: Verificar se pode comprar
+            if game_state['coins'] >= cost:
+                # Debitar custo
+                game_state['coins'] -= cost
                 
                 # Aplicar upgrade
-                current_level = game_state['upgrades'].get(upgrade_type, 0)
                 game_state['upgrades'][upgrade_type] = current_level + 1
                 
-                # Atualizar estatísticas do jogo
+                # ✅ CORREÇÃO: Atualizar estatísticas do jogo
                 self._update_game_stats(game_state)
                 
                 # Verificar conquistas
                 new_achievements = self._check_achievements(game_state)
                 
-                # Salvar estado atualizado
+                # Salvar
                 self.save_game_state(user_id, game_state)
                 
-                logger.info(f"🛒 Upgrade comprado: {upgrade_type} nível {current_level + 1} por {cost} popcoins")
+                logger.info(f"🛒 Upgrade comprado: {upgrade_type} nível {current_level + 1} por {cost} moedas")
                 
                 return {
-                    "success": True, 
-                    "game_state": game_state,
+                    "success": True,
                     "upgrade_type": upgrade_type,
                     "new_level": current_level + 1,
                     "cost": cost,
-                    "new_achievements": new_achievements
+                    "new_achievements": new_achievements,
+                    "game_state": game_state
                 }
             else:
-                logger.warning(f"❌ Popcoins insuficientes para upgrade {upgrade_type}: {game_state['popcoins']}/{cost}")
                 return {
-                    "success": False, 
-                    "error": "Popcoins insuficientes",
+                    "success": False,
+                    "error": "Moedas insuficientes",
                     "required": cost,
-                    "current": game_state['popcoins']
+                    "current": game_state['coins']
                 }
                 
         except Exception as e:
-            logger.error(f"❌ Erro ao comprar upgrade: {e}")
+            logger.error(f"❌ Erro na compra: {e}")
             return {"success": False, "error": str(e)}
-    
-    def prestige(self, user_id: str) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Executa prestígio com bônus balanceados"""
-        try:
-            game_state = self.get_user_game_state(user_id)
-            
-            # ✅ CORREÇÃO: Verificar requisitos de prestígio
-            required_coins = 10000
-            if game_state['total_coins'] >= required_coins:
-                current_prestige = game_state.get('prestige_level', 0)
-                prestige_bonus = max(1, game_state['total_coins'] // 10000)
-                
-                # ✅ CORREÇÃO: Aplicar prestígio - resetar com bônus
-                game_state['prestige_level'] = current_prestige + 1
-                game_state['popcoins'] = 0
-                game_state['coins_per_click'] = 1 + prestige_bonus
-                game_state['coins_per_second'] = 0
-                game_state['clicks'] = 0
-                game_state['level'] = 1
-                game_state['experience'] = 0
-                
-                # Manter upgrades mas resetar para nível 1 com bônus
-                game_state['upgrades'] = {
-                    "click_power": 1 + prestige_bonus,
-                    "auto_clicker": 0,
-                    "auto_clickers": 0,
-                    "click_bots": 0
-                }
-                
-                # Manter conquistas e inventário
-                # game_state['achievements'] = []  # Opcional: resetar conquistas
-                # game_state['inventory'] = []     # Opcional: resetar inventário
-                
-                # Atualizar estatísticas após prestígio
-                self._update_game_stats(game_state)
-                
-                # Salvar estado atualizado
-                self.save_game_state(user_id, game_state)
-                
-                logger.info(f"⭐ Prestígio realizado: nível {game_state['prestige_level']} com bônus {prestige_bonus}")
-                
-                return {
-                    "success": True, 
-                    "game_state": game_state,
-                    "prestige_bonus": prestige_bonus,
-                    "new_prestige_level": game_state['prestige_level']
-                }
-            else:
-                return {
-                    "success": False, 
-                    "error": "Total de moedas insuficiente para prestígio",
-                    "required": required_coins,
-                    "current": game_state['total_coins']
-                }
-                
-        except Exception as e:
-            logger.error(f"❌ Erro no prestígio: {e}")
-            return {"success": False, "error": str(e)}
-    
-    def _calculate_upgrade_cost(self, base_cost: int, current_level: int) -> int:
-        """✅ CORREÇÃO: Calcula custo de upgrade com crescimento balanceado"""
-        return int(base_cost * (1.8 ** current_level))
-    
+
+    def _calculate_upgrade_cost(self, base_cost: float, multiplier: float, current_level: int) -> int:
+        """✅ CORREÇÃO: Cálculo de custo balanceado"""
+        return int(base_cost * (multiplier ** current_level))
+
     def _update_game_stats(self, game_state: Dict[str, Any]) -> None:
-        """✅ CORREÇÃO: Atualiza estatísticas baseadas em upgrades"""
+        """✅ CORREÇÃO: Atualização robusta de estatísticas"""
         try:
-            # Força do clique
+            # ✅ CORREÇÃO: Moedas por clique
             base_click = 1
             click_power = game_state['upgrades'].get('click_power', 1)
-            prestige_bonus = game_state.get('prestige_level', 0) * 0.5
-            level_bonus = (game_state.get('level', 1) - 1) * 0.1
+            prestige_bonus = game_state.get('prestige_level', 0) * 0.1
+            level_bonus = (game_state.get('level', 1) - 1) * 0.05
             
             game_state['coins_per_click'] = base_click + (click_power - 1) + prestige_bonus + level_bonus
             
-            # Moedas por segundo 
-            auto_clicker_rate = game_state['upgrades'].get('auto_clicker', 0) * 0.1
-            auto_clickers_rate = game_state['upgrades'].get('auto_clickers', 0) * 0.5
-            click_bots_rate = game_state['upgrades'].get('click_bots', 0) * 2.0
+            # ✅ CORREÇÃO: Moedas por segundo (VALORES AUMENTADOS)
+            auto_clickers = game_state['upgrades'].get('auto_clickers', 0)
+            click_bots = game_state['upgrades'].get('click_bots', 0)
             
-            game_state['coins_per_second'] = auto_clicker_rate + auto_clickers_rate + click_bots_rate
+            # ✅ CORREÇÃO: Valores aumentados para melhor gameplay
+            auto_clickers_rate = auto_clickers * 0.5  # 0.5 moedas por segundo por nível
+            click_bots_rate = click_bots * 2.0        # 2.0 moedas por segundo por nível
             
-            logger.debug(f"📊 Estatísticas atualizadas: {game_state['coins_per_click']} por clique, {game_state['coins_per_second']} por segundo")
+            game_state['coins_per_second'] = auto_clickers_rate + click_bots_rate
+            
+            logger.debug(f"📊 Stats atualizados: {game_state['coins_per_click']}/clique, {game_state['coins_per_second']}/segundo")
             
         except Exception as e:
-            logger.error(f"❌ Erro ao atualizar estatísticas: {e}")
-    
+            logger.error(f"❌ Erro ao atualizar stats: {e}")
+
     def _check_level_up(self, game_state: Dict[str, Any]) -> bool:
-        """✅ CORREÇÃO: Verifica level up com progressão balanceada"""
+        """✅ CORREÇÃO: Sistema de level up balanceado"""
         try:
-            current_experience = game_state.get('experience', 0)
+            current_exp = game_state.get('experience', 0)
             current_level = game_state.get('level', 1)
             
-            # Fórmula: 100 EXP por nível atual
-            exp_needed = current_level * 100
+            # ✅ CORREÇÃO: Progressão exponencial
+            exp_required = current_level * 100
             
-            if current_experience >= exp_needed:
+            if current_exp >= exp_required:
                 new_level = current_level + 1
-                remaining_exp = current_experience - exp_needed
+                remaining_exp = current_exp - exp_required
                 
                 game_state['level'] = new_level
                 game_state['experience'] = remaining_exp
                 
-                # Bônus de level up
-                level_bonus = new_level * 0.1
-                game_state['coins_per_click'] += level_bonus
-                
-                logger.info(f"🎯 Level up: nível {new_level} (EXP: {remaining_exp}/{new_level * 100})")
+                logger.info(f"🎯 Level up! Nível {new_level}")
                 return True
             
             return False
             
         except Exception as e:
-            logger.error(f"❌ Erro ao verificar level up: {e}")
+            logger.error(f"❌ Erro no level up: {e}")
             return False
-    
+
     def _check_achievements(self, game_state: Dict[str, Any]) -> List[str]:
-        """✅ CORREÇÃO: Verifica conquistas com critérios claros"""
+        """✅ CORREÇÃO: Sistema de conquistas"""
         try:
             current_achievements = game_state.get('achievements', [])
             new_achievements = []
             
             achievement_criteria = [
                 ('first_coins', game_state['total_coins'] >= 100),
-                ('fast_clicker', game_state['clicks'] >= 50),
-                ('industrial', sum(game_state['upgrades'].values()) >= 10),
-                ('millionaire', game_state['total_coins'] >= 1000000),
-                ('prestige', game_state['prestige_level'] >= 1),
-                ('click_master', game_state['clicks'] >= 1000),
-                ('upgrade_expert', sum(game_state['upgrades'].values()) >= 25),
-                ('idle_tycoon', game_state['coins_per_second'] >= 10)
+                ('clicker_beginner', game_state['click_count'] >= 50),
+                ('clicker_pro', game_state['click_count'] >= 500),
+                ('upgrade_collector', sum(game_state['upgrades'].values()) >= 10),
+                ('idle_master', game_state['coins_per_second'] >= 5),
+                ('wealthy', game_state['total_coins'] >= 10000),
+                ('prestige_beginner', game_state['prestige_level'] >= 1),
             ]
             
             for achievement_id, condition in achievement_criteria:
@@ -447,148 +360,110 @@ class GameManager:
                     current_achievements.append(achievement_id)
                     new_achievements.append(achievement_id)
             
-            # Atualizar lista de conquistas
             game_state['achievements'] = current_achievements
             
             if new_achievements:
-                logger.info(f"🏆 Conquistas desbloqueadas: {new_achievements}")
+                logger.info(f"🏆 Conquistas: {new_achievements}")
             
             return new_achievements
             
         except Exception as e:
-            logger.error(f"❌ Erro ao verificar conquistas: {e}")
+            logger.error(f"❌ Erro nas conquistas: {e}")
             return []
-    
-    def get_user_stats(self, user_id: str) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Obtém estatísticas completas"""
+
+    def get_upgrade_info(self, user_id: str) -> Dict[str, Any]:
+        """✅ CORREÇÃO: Informações detalhadas dos upgrades"""
         try:
             game_state = self.get_user_game_state(user_id)
+            upgrades_info = {}
             
-            return {
-                "user_id": user_id,
-                "popcoins": game_state.get('popcoins', 0),
-                "total_coins": game_state.get('total_coins', 0),
-                "level": game_state.get('level', 1),
-                "prestige_level": game_state.get('prestige_level', 0),
-                "clicks": game_state.get('clicks', 0),
-                "experience": game_state.get('experience', 0),
-                "achievements_count": len(game_state.get('achievements', [])),
-                "coins_per_click": game_state.get('coins_per_click', 1),
-                "coins_per_second": game_state.get('coins_per_second', 0),
-                "total_upgrades": sum(game_state.get('upgrades', {}).values()),
-                "last_active": game_state.get('last_update', time.time())
-            }
-        except Exception as e:
-            logger.error(f"❌ Erro ao obter estatísticas: {e}")
-            return {}
-
-    def reset_user_data(self, user_id: str) -> bool:
-        """✅ CORREÇÃO: Reseta dados completamente"""
-        try:
-            initial_state = self.default_game_state.copy()
-            return self.save_game_state(user_id, initial_state)
-        except Exception as e:
-            logger.error(f"❌ Erro ao resetar dados: {e}")
-            return False
-
-    def get_available_upgrades(self, user_id: str) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Retorna upgrades disponíveis com informações completas"""
-        try:
-            game_state = self.get_user_game_state(user_id)
-            current_upgrades = game_state.get('upgrades', {})
-            current_popcoins = game_state.get('popcoins', 0)
-            
-            upgrade_definitions = {
-                "click_power": {
-                    "current_level": current_upgrades.get('click_power', 1),
-                    "base_cost": 10,
-                    "description": "Aumenta moedas por clique em +1",
-                    "effect": "Clique mais forte"
-                },
-                "auto_clicker": {
-                    "current_level": current_upgrades.get('auto_clicker', 0),
-                    "base_cost": 50,
-                    "description": "Gera 0.1 moedas por segundo por nível",
-                    "effect": "Geração automática básica"
-                },
-                "auto_clickers": {
-                    "current_level": current_upgrades.get('auto_clickers', 0),
-                    "base_cost": 200,
-                    "description": "Gera 0.5 moedas por segundo por nível",
-                    "effect": "Geração automática avançada"
-                },
-                "click_bots": {
-                    "current_level": current_upgrades.get('click_bots', 0),
-                    "base_cost": 1000,
-                    "description": "Gera 2.0 moedas por segundo por nível",
-                    "effect": "Geração automática máxima"
-                }
-            }
-            
-            # Calcular custos reais e disponibilidade
-            available_upgrades = {}
-            for upgrade_id, upgrade_data in upgrade_definitions.items():
-                current_level = upgrade_data['current_level']
-                base_cost = upgrade_data['base_cost']
-                actual_cost = self._calculate_upgrade_cost(base_cost, current_level)
+            for upgrade_type, config in self.upgrade_config.items():
+                current_level = game_state['upgrades'].get(upgrade_type, 0)
+                cost = self._calculate_upgrade_cost(config['base_cost'], config['cost_multiplier'], current_level)
                 
-                available_upgrades[upgrade_id] = {
-                    **upgrade_data,
-                    "actual_cost": actual_cost,
-                    "can_afford": current_popcoins >= actual_cost,
-                    "next_level": current_level + 1
+                upgrades_info[upgrade_type] = {
+                    'current_level': current_level,
+                    'next_level': current_level + 1,
+                    'cost': cost,
+                    'can_afford': game_state['coins'] >= cost,
+                    'description': config['description'],
+                    'effect_per_level': config['effect_per_level']
                 }
             
-            return available_upgrades
+            return upgrades_info
             
         except Exception as e:
-            logger.error(f"❌ Erro ao obter upgrades disponíveis: {e}")
+            logger.error(f"❌ Erro ao obter upgrade info: {e}")
             return {}
 
-    def health_check(self) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Health check do GameManager"""
+    def prestige(self, user_id: str) -> Dict[str, Any]:
+        """✅ CORREÇÃO: Sistema de prestígio balanceado"""
         try:
-            test_state = self.default_game_state.copy()
-            self._ensure_required_fields(test_state)
+            game_state = self.get_user_game_state(user_id)
             
-            return {
-                'healthy': True,
-                'message': 'GameManager operacional',
-                'default_state_valid': True,
-                'required_fields_check': True
-            }
+            # ✅ CORREÇÃO: Requisito de prestígio aumentado
+            required_coins = 25000
+            
+            if game_state['total_coins'] >= required_coins:
+                current_prestige = game_state.get('prestige_level', 0)
+                prestige_bonus = max(1, int(game_state['total_coins'] / 10000))
+                
+                # ✅ CORREÇÃO: Aplicar prestígio
+                game_state['prestige_level'] = current_prestige + 1
+                game_state['coins'] = 0
+                game_state['coins_per_click'] = 1 + prestige_bonus
+                game_state['coins_per_second'] = 0
+                game_state['click_count'] = 0
+                game_state['level'] = 1
+                game_state['experience'] = 0
+                
+                # ✅ CORREÇÃO: Manter apenas conquistas, resetar upgrades
+                game_state['upgrades'] = {
+                    "click_power": 1,
+                    "auto_clickers": 0,
+                    "click_bots": 0
+                }
+                
+                # Atualizar stats
+                self._update_game_stats(game_state)
+                
+                # Salvar
+                self.save_game_state(user_id, game_state)
+                
+                logger.info(f"⭐ Prestígio {current_prestige + 1}! Bônus: {prestige_bonus}x")
+                
+                return {
+                    "success": True,
+                    "prestige_level": game_state['prestige_level'],
+                    "prestige_bonus": prestige_bonus,
+                    "game_state": game_state
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Requer {required_coins} moedas totais",
+                    "required": required_coins,
+                    "current": game_state['total_coins']
+                }
+                
         except Exception as e:
-            return {
-                'healthy': False,
-                'message': f'Erro no health check: {e}',
-                'default_state_valid': False,
-                'required_fields_check': False
-            }
+            logger.error(f"❌ Erro no prestígio: {e}")
+            return {"success": False, "error": str(e)}
 
-# ✅ CORREÇÃO: Instância única com verificação
-game_manager = None
+# ✅ CORREÇÃO: Singleton melhorado
+_game_manager_instance = None
 
 def get_game_manager():
-    """Singleton para GameManager"""
-    global game_manager
-    if game_manager is None:
+    global _game_manager_instance
+    if _game_manager_instance is None:
         try:
-            logger.info("🔄 Criando GameManager...")
-            game_manager = GameManager()
-            
-            # Verificar saúde
-            health = game_manager.health_check()
-            if health['healthy']:
-                logger.info("🎉 GameManager inicializado com sucesso!")
-            else:
-                logger.error(f"❌ GameManager com problemas: {health['message']}")
-                
+            _game_manager_instance = GameManager()
+            logger.info("🎮 GameManager criado com sucesso")
         except Exception as e:
-            logger.error(f"💥 Falha crítica na criação do GameManager: {e}")
-            game_manager = None
-    
-    return game_manager
+            logger.error(f"💥 Falha ao criar GameManager: {e}")
+            _game_manager_instance = None
+    return _game_manager_instance
 
-# Inicialização controlada
-logger.info("📦 Inicializando game_logic.py...")
+# Inicialização
+logger.info("📦 Carregando game_logic.py...")
 game_manager = get_game_manager()

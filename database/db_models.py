@@ -1,4 +1,4 @@
-# database/db_models.py - VERSÃO CORRIGIDA E OTIMIZADA
+# database/db_models.py - VERSÃO COMPLETAMENTE CORRIGIDA E ALINHADA
 import os
 import psycopg2
 import json
@@ -18,7 +18,7 @@ connection_pool = None
 pool_lock = threading.Lock()
 
 class DatabaseManager:
-    """Gerenciador de banco de dados para o PopCoin IDLE - VERSÃO CORRIGIDA"""
+    """Gerenciador de banco de dados para o PopCoin IDLE - VERSÃO ALINHADA"""
     
     def __init__(self):
         self.initialized = False
@@ -37,13 +37,11 @@ class DatabaseManager:
         try:
             conn = connection_pool.getconn()
             if conn and not conn.closed:
-                # ✅ CORREÇÃO: Verificar se a conexão ainda é válida
                 try:
                     with conn.cursor() as cur:
                         cur.execute('SELECT 1')
                     return conn
                 except psycopg2.InterfaceError:
-                    # Conexão inválida, criar nova
                     connection_pool.putconn(conn, close=True)
                     return self.create_direct_connection()
             else:
@@ -66,13 +64,12 @@ class DatabaseManager:
                 conn.close()
 
     def create_direct_connection(self):
-        """✅ CORREÇÃO: Conexão direta com tratamento de erro melhorado"""
+        """✅ CORREÇÃO: Conexão direta robusta"""
         if not self.database_url:
             logger.error("❌ DATABASE_URL não encontrada")
             return None
 
         try:
-            # ✅ CORREÇÃO: Converter postgres:// para postgresql://
             database_url = self.database_url
             if database_url.startswith('postgres://'):
                 database_url = database_url.replace('postgres://', 'postgresql://')
@@ -85,7 +82,6 @@ class DatabaseManager:
                 connect_timeout=10
             )
 
-            # Testar conexão
             with conn.cursor() as cur:
                 cur.execute("SELECT current_database(), current_user;")
                 result = cur.fetchone()
@@ -100,7 +96,7 @@ class DatabaseManager:
             return None
 
     def init_db(self):
-        """✅ CORREÇÃO: Inicialização robusta com fallbacks"""
+        """✅ CORREÇÃO: Inicialização robusta"""
         global connection_pool
         
         if self.initialized:
@@ -110,20 +106,18 @@ class DatabaseManager:
         
         if not self.database_url:
             logger.warning("⚠️ DATABASE_URL não encontrada - Modo desenvolvimento sem banco")
-            self.initialized = True  # ✅ CORREÇÃO: Marcar como inicializado mesmo sem banco
+            self.initialized = True
             return
         
         try:
-            # Testar conexão primeiro
             test_conn = self.create_direct_connection()
             if not test_conn:
                 logger.error("❌ Não foi possível conectar ao banco - Modo desenvolvimento")
-                self.initialized = True  # ✅ CORREÇÃO: Continuar sem banco
+                self.initialized = True
                 return
                 
             test_conn.close()
             
-            # ✅ CORREÇÃO: Pool com configuração otimizada
             with pool_lock:
                 database_url = self.database_url
                 if database_url.startswith('postgres://'):
@@ -138,16 +132,15 @@ class DatabaseManager:
                 
             logger.info(f"✅ Pool de conexões criado! (min: {self.pool_min}, max: {self.pool_max})")
             
-            # Criar tabelas
             self.create_tables()
             self.initialized = True
             
         except Exception as e:
             logger.error(f"❌ Erro na inicialização do banco: {e}")
-            self.initialized = True  # ✅ CORREÇÃO: Continuar mesmo com erro
+            self.initialized = True
 
     def create_tables(self):
-        """✅ CORREÇÃO: Tabelas com estrutura consistente"""
+        """✅ CORREÇÃO: Tabelas com estrutura ALINHADA com game_logic"""
         conn = self.get_db_connection()
         if not conn:
             logger.error("❌ Falha ao conectar para criar tabelas")
@@ -183,22 +176,24 @@ class DatabaseManager:
             else:
                 logger.info("✅ Tabela 'users' já existe")
 
-            # Tabela de estados do jogo
+            # ✅ CORREÇÃO: Tabela de estados do jogo COM ESTRUTURA ALINHADA
             if 'user_game_states' not in existing_tables:
                 cur.execute('''
                     CREATE TABLE user_game_states (
                         user_id VARCHAR(255) PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
-                        popcoins BIGINT DEFAULT 0,
-                        coins_per_click INTEGER DEFAULT 1,
+                        -- ✅ CORREÇÃO: Usar 'coins' em vez de 'popcoins' para consistência
+                        coins BIGINT DEFAULT 0,
+                        coins_per_click NUMERIC(10,2) DEFAULT 1,
                         coins_per_second NUMERIC(10,2) DEFAULT 0,
                         total_coins BIGINT DEFAULT 0,
                         prestige_level INTEGER DEFAULT 0,
+                        -- ✅ CORREÇÃO: Usar 'click_count' em vez de 'clicks'
                         click_count INTEGER DEFAULT 0,
                         level INTEGER DEFAULT 1,
                         experience INTEGER DEFAULT 0,
+                        -- ✅ CORREÇÃO: Estrutura de upgrades ALINHADA (sem auto_clicker duplicado)
                         upgrades JSONB DEFAULT '{
                             "click_power": 1,
-                            "auto_clicker": 0,
                             "auto_clickers": 0,
                             "click_bots": 0
                         }'::jsonb,
@@ -209,17 +204,11 @@ class DatabaseManager:
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 ''')
-                logger.info("✅ Tabela 'user_game_states' criada")
+                logger.info("✅ Tabela 'user_game_states' criada com estrutura alinhada")
             else:
                 logger.info("✅ Tabela 'user_game_states' já existe")
-                # ✅ CORREÇÃO: Verificar e adicionar coluna popcoins se necessário
-                try:
-                    cur.execute("SELECT popcoins FROM user_game_states LIMIT 1")
-                except Exception:
-                    logger.info("🔄 Adicionando coluna 'popcoins' à tabela existente...")
-                    cur.execute('ALTER TABLE user_game_states ADD COLUMN popcoins BIGINT DEFAULT 0')
-                    conn.commit()
-                    logger.info("✅ Coluna 'popcoins' adicionada")
+                # ✅ CORREÇÃO: Migrar estrutura existente para formato alinhado
+                self._migrate_existing_tables(conn, cur)
 
             # Tabela de ranking
             if 'user_ranking' not in existing_tables:
@@ -236,9 +225,9 @@ class DatabaseManager:
             else:
                 logger.info("✅ Tabela 'user_ranking' já existe")
 
-            # ✅ CORREÇÃO: Criar índices de forma condicional
+            # ✅ CORREÇÃO: Criar índices
             indexes = [
-                ('idx_user_game_states_popcoins', 'user_game_states', 'popcoins DESC'),
+                ('idx_user_game_states_coins', 'user_game_states', 'coins DESC'),
                 ('idx_user_ranking_score', 'user_ranking', 'total_score DESC'),
                 ('idx_users_email', 'users', 'email')
             ]
@@ -253,7 +242,7 @@ class DatabaseManager:
                     logger.info(f"✅ Índice '{index_name}' criado")
             
             conn.commit()
-            logger.info("✅ Estrutura do banco verificada/criada com sucesso!")
+            logger.info("🎯 Estrutura do banco ALINHADA com sucesso!")
             
         except Exception as e:
             logger.error(f"❌ Erro na criação das tabelas: {e}")
@@ -262,10 +251,76 @@ class DatabaseManager:
             cur.close()
             self.return_db_connection(conn)
 
-    # ========== MÉTODOS DE USUÁRIO ==========
+    def _migrate_existing_tables(self, conn, cur):
+        """✅ CORREÇÃO: Migrar tabelas existentes para estrutura alinhada"""
+        try:
+            # Verificar se existe coluna 'popcoins' (antiga)
+            cur.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'user_game_states' AND column_name = 'popcoins'
+            """)
+            has_popcoins = cur.fetchone()
+            
+            if has_popcoins:
+                logger.info("🔄 Migrando 'popcoins' para 'coins'...")
+                # Migrar dados de popcoins para coins
+                cur.execute('''
+                    UPDATE user_game_states 
+                    SET coins = popcoins 
+                    WHERE coins = 0 AND popcoins > 0
+                ''')
+                logger.info("✅ Dados de popcoins migrados para coins")
+            
+            # Verificar se existe coluna 'clicks' (antiga)
+            cur.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'user_game_states' AND column_name = 'clicks'
+            """)
+            has_clicks = cur.fetchone()
+            
+            if has_clicks:
+                logger.info("🔄 Migrando 'clicks' para 'click_count'...")
+                # Migrar dados de clicks para click_count
+                cur.execute('''
+                    UPDATE user_game_states 
+                    SET click_count = clicks 
+                    WHERE click_count = 0 AND clicks > 0
+                ''')
+                logger.info("✅ Dados de clicks migrados para click_count")
+            
+            # ✅ CORREÇÃO: Atualizar estrutura de upgrades para formato alinhado
+            logger.info("🔄 Atualizando estrutura de upgrades...")
+            cur.execute('''
+                UPDATE user_game_states 
+                SET upgrades = jsonb_set(
+                    jsonb_set(
+                        COALESCE(upgrades, '{}'::jsonb) - 'auto_clicker',
+                        '{auto_clickers}',
+                        COALESCE(
+                            (upgrades->>'auto_clickers')::jsonb,
+                            (upgrades->>'auto_clicker')::jsonb,
+                            '0'::jsonb
+                        )
+                    ),
+                    '{click_power}',
+                    COALESCE((upgrades->>'click_power')::jsonb, '1'::jsonb)
+                ) - 'auto_clicker'
+                WHERE upgrades IS NOT NULL
+            ''')
+            
+            conn.commit()
+            logger.info("✅ Estrutura de upgrades atualizada")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro na migração: {e}")
+            conn.rollback()
+
+    # ========== MÉTODOS DE USUÁRIO ALINHADOS ==========
 
     def save_user_data(self, user_id: str, user_data: Dict[str, Any]) -> bool:
-        """✅ CORREÇÃO: Salva dados de forma consistente"""
+        """✅ CORREÇÃO: Salva dados com estrutura ALINHADA"""
         if not self.initialized:
             logger.warning("⚠️ Banco não inicializado - salvamento simulado")
             return True
@@ -304,18 +359,21 @@ class DatabaseManager:
                     json.dumps(user_data.get('preferences', {}))
                 ))
                 
-                # ✅ CORREÇÃO: Salvar dados do jogo
+                # ✅ CORREÇÃO: Salvar dados do jogo COM ESTRUTURA ALINHADA
                 if user_data.get('game_data'):
                     game_data = user_data['game_data']
                     
+                    # ✅ CORREÇÃO: Converter estrutura para formato alinhado
+                    aligned_game_data = self._align_game_data_structure(game_data)
+                    
                     cur.execute('''
                         INSERT INTO user_game_states 
-                        (user_id, popcoins, coins_per_click, coins_per_second, total_coins,
+                        (user_id, coins, coins_per_click, coins_per_second, total_coins,
                          prestige_level, click_count, level, experience,
                          upgrades, achievements, inventory, last_update)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s)
                         ON CONFLICT (user_id) DO UPDATE SET
-                            popcoins = EXCLUDED.popcoins,
+                            coins = EXCLUDED.coins,
                             coins_per_click = EXCLUDED.coins_per_click,
                             coins_per_second = EXCLUDED.coins_per_second,
                             total_coins = EXCLUDED.total_coins,
@@ -330,22 +388,26 @@ class DatabaseManager:
                             updated_at = CURRENT_TIMESTAMP
                     ''', (
                         user_id,
-                        game_data.get('popcoins', 0),
-                        game_data.get('coins_per_click', 1),
-                        game_data.get('coins_per_second', 0),
-                        game_data.get('total_coins', 0),
-                        game_data.get('prestige_level', 0),
-                        game_data.get('clicks', 0),
-                        game_data.get('level', 1),
-                        game_data.get('experience', 0),
-                        json.dumps(game_data.get('upgrades', {})),
-                        json.dumps(game_data.get('achievements', [])),
-                        json.dumps(game_data.get('inventory', [])),
+                        aligned_game_data.get('coins', 0),
+                        aligned_game_data.get('coins_per_click', 1),
+                        aligned_game_data.get('coins_per_second', 0),
+                        aligned_game_data.get('total_coins', 0),
+                        aligned_game_data.get('prestige_level', 0),
+                        aligned_game_data.get('click_count', 0),
+                        aligned_game_data.get('level', 1),
+                        aligned_game_data.get('experience', 0),
+                        json.dumps(aligned_game_data.get('upgrades', {
+                            'click_power': 1,
+                            'auto_clickers': 0,
+                            'click_bots': 0
+                        })),
+                        json.dumps(aligned_game_data.get('achievements', [])),
+                        json.dumps(aligned_game_data.get('inventory', [])),
                         current_time
                     ))
                 
                 conn.commit()
-                logger.info(f"✅ Dados salvos para usuário: {user_id}")
+                logger.debug(f"✅ Dados ALINHADOS salvos para usuário: {user_id}")
                 return True
                 
         except Exception as e:
@@ -355,8 +417,40 @@ class DatabaseManager:
         finally:
             self.return_db_connection(conn)
 
+    def _align_game_data_structure(self, game_data: Dict[str, Any]) -> Dict[str, Any]:
+        """✅ CORREÇÃO: Converte estrutura de game_data para formato alinhado"""
+        aligned_data = game_data.copy()
+        
+        # ✅ CORREÇÃO: Converter popcoins para coins
+        if 'popcoins' in aligned_data and 'coins' not in aligned_data:
+            aligned_data['coins'] = aligned_data.pop('popcoins', 0)
+        
+        # ✅ CORREÇÃO: Converter clicks para click_count
+        if 'clicks' in aligned_data and 'click_count' not in aligned_data:
+            aligned_data['click_count'] = aligned_data.pop('clicks', 0)
+        
+        # ✅ CORREÇÃO: Garantir estrutura de upgrades alinhada
+        upgrades = aligned_data.get('upgrades', {})
+        if 'auto_clicker' in upgrades:
+            # Migrar auto_clicker para auto_clickers
+            auto_clicker_value = upgrades.pop('auto_clicker', 0)
+            if 'auto_clickers' not in upgrades:
+                upgrades['auto_clickers'] = auto_clicker_value
+            elif upgrades['auto_clickers'] < auto_clicker_value:
+                upgrades['auto_clickers'] = auto_clicker_value
+        
+        # ✅ CORREÇÃO: Garantir todos os upgrades necessários existem
+        required_upgrades = ['click_power', 'auto_clickers', 'click_bots']
+        for upgrade in required_upgrades:
+            if upgrade not in upgrades:
+                upgrades[upgrade] = 1 if upgrade == 'click_power' else 0
+        
+        aligned_data['upgrades'] = upgrades
+        
+        return aligned_data
+
     def get_user_data(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """✅ CORREÇÃO: Obter dados com estrutura consistente"""
+        """✅ CORREÇÃO: Obter dados com estrutura ALINHADA"""
         if not self.initialized:
             logger.warning("⚠️ Banco não inicializado - retornando dados padrão")
             return self.get_default_user_data(user_id)
@@ -372,7 +466,7 @@ class DatabaseManager:
                     SELECT 
                         u.user_id, u.email, u.display_name, u.avatar_url,
                         u.email_verified, u.created_at, u.last_login, u.last_activity, u.preferences,
-                        g.popcoins, g.coins_per_click, g.coins_per_second, g.total_coins,
+                        g.coins, g.coins_per_click, g.coins_per_second, g.total_coins,
                         g.prestige_level, g.click_count, g.level, g.experience,
                         g.upgrades, g.achievements, g.inventory, g.last_update
                     FROM users u
@@ -385,7 +479,7 @@ class DatabaseManager:
                     logger.warning(f"⚠️ Usuário não encontrado no banco: {user_id}")
                     return self.get_default_user_data(user_id)
                 
-                # ✅ CORREÇÃO: Estrutura consistente de dados
+                # ✅ CORREÇÃO: Estrutura ALINHADA de dados
                 user_data = {
                     'uid': result['user_id'],
                     'email': result['email'],
@@ -397,26 +491,29 @@ class DatabaseManager:
                     'last_activity': result['last_activity'].isoformat() if result['last_activity'] else datetime.now().isoformat(),
                     'preferences': result['preferences'] or {},
                     'game_data': {
-                        'popcoins': result['popcoins'] or 0,
-                        'clicks': result['click_count'] or 0,
+                        # ✅ CORREÇÃO: Usar 'coins' em vez de 'popcoins'
+                        'coins': result['coins'] or 0,
+                        # ✅ CORREÇÃO: Usar 'click_count' em vez de 'clicks'
+                        'click_count': result['click_count'] or 0,
                         'level': result['level'] or 1,
                         'experience': result['experience'] or 0,
-                        'coins_per_click': result['coins_per_click'] or 1,
+                        'coins_per_click': float(result['coins_per_click'] or 1),
                         'coins_per_second': float(result['coins_per_second'] or 0),
                         'total_coins': result['total_coins'] or 0,
                         'prestige_level': result['prestige_level'] or 0,
+                        # ✅ CORREÇÃO: Estrutura de upgrades ALINHADA
                         'upgrades': result['upgrades'] or {
                             'click_power': 1,
-                            'auto_clicker': 0,
                             'auto_clickers': 0,
                             'click_bots': 0
                         },
                         'achievements': result['achievements'] or [],
-                        'inventory': result['inventory'] or []
+                        'inventory': result['inventory'] or [],
+                        'last_update': result['last_update'].timestamp() if result['last_update'] else time.time()
                     }
                 }
                 
-                logger.info(f"✅ Dados carregados do banco para usuário: {user_id}")
+                logger.debug(f"✅ Dados ALINHADOS carregados do banco para usuário: {user_id}")
                 return user_data
                 
         except Exception as e:
@@ -426,7 +523,7 @@ class DatabaseManager:
             self.return_db_connection(conn)
 
     def get_default_user_data(self, user_id: str) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Dados padrão consistentes"""
+        """✅ CORREÇÃO: Dados padrão ALINHADOS"""
         current_time = datetime.now().isoformat()
         return {
             'uid': user_id,
@@ -447,10 +544,11 @@ class DatabaseManager:
         }
 
     def get_default_game_state(self) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Estado padrão do jogo"""
+        """✅ CORREÇÃO: Estado padrão do jogo ALINHADO"""
+        import time
         return {
-            'popcoins': 0,
-            'clicks': 0,
+            'coins': 0,  # ✅ CORREÇÃO: Usar 'coins' em vez de 'popcoins'
+            'click_count': 0,  # ✅ CORREÇÃO: Usar 'click_count' em vez de 'clicks'
             'level': 1,
             'experience': 0,
             'coins_per_click': 1,
@@ -459,12 +557,12 @@ class DatabaseManager:
             'prestige_level': 0,
             'upgrades': {
                 'click_power': 1,
-                'auto_clicker': 0,
-                'auto_clickers': 0,
+                'auto_clickers': 0,  # ✅ CORREÇÃO: Sem 'auto_clicker' duplicado
                 'click_bots': 0
             },
             'achievements': [],
-            'inventory': []
+            'inventory': [],
+            'last_update': time.time()
         }
 
     def get_ranking(self, limit: int = 10) -> List[Dict[str, Any]]:
@@ -482,10 +580,10 @@ class DatabaseManager:
             with conn.cursor(cursor_factory=DictCursor) as cur:
                 cur.execute('''
                     SELECT u.user_id, u.display_name, u.avatar_url,
-                           r.total_score, r.prestige_level, r.level
-                    FROM user_ranking r
-                    JOIN users u ON r.user_id = u.user_id
-                    ORDER BY r.total_score DESC, r.prestige_level DESC, r.level DESC
+                           g.total_coins as total_score, g.prestige_level, g.level
+                    FROM user_game_states g
+                    JOIN users u ON g.user_id = u.user_id
+                    ORDER BY g.total_coins DESC, g.prestige_level DESC, g.level DESC
                     LIMIT %s
                 ''', (limit,))
                 
@@ -497,7 +595,7 @@ class DatabaseManager:
                         'uid': row['user_id'],
                         'name': row['display_name'] or f'Jogador {idx + 1}',
                         'avatar': row['avatar_url'] or '/static/images/default-avatar.png',
-                        'popcoins': row['total_score'],
+                        'total_coins': row['total_score'],
                         'prestige_level': row['prestige_level'],
                         'level': row['level'],
                         'rank': idx + 1
@@ -515,9 +613,9 @@ class DatabaseManager:
     def get_mock_ranking(self, limit: int = 10) -> List[Dict[str, Any]]:
         """✅ CORREÇÃO: Ranking mock para desenvolvimento"""
         mock_ranking = [
-            {'uid': 'user_1', 'name': 'Jogador Top', 'popcoins': 15000, 'level': 15, 'prestige_level': 2, 'rank': 1},
-            {'uid': 'user_2', 'name': 'Clique Mestre', 'popcoins': 12000, 'level': 12, 'prestige_level': 1, 'rank': 2},
-            {'uid': 'user_3', 'name': 'Coletor Ávido', 'popcoins': 8000, 'level': 10, 'prestige_level': 0, 'rank': 3}
+            {'uid': 'user_1', 'name': 'Jogador Top', 'total_coins': 15000, 'level': 15, 'prestige_level': 2, 'rank': 1},
+            {'uid': 'user_2', 'name': 'Clique Mestre', 'total_coins': 12000, 'level': 12, 'prestige_level': 1, 'rank': 2},
+            {'uid': 'user_3', 'name': 'Coletor Ávido', 'total_coins': 8000, 'level': 10, 'prestige_level': 0, 'rank': 3}
         ]
         return mock_ranking[:limit]
 
@@ -576,9 +674,8 @@ def get_database_manager():
             if db_manager.initialized:
                 logger.info("🎉 DatabaseManager inicializado com sucesso!")
                 
-                # Log do health check
                 health = db_manager.health_check()
-                logger.info(f"📊 Health check do banco: {health}")
+                logger.info(f"📊 Health check do banco: {health['message']}")
             else:
                 logger.warning("⚠️ DatabaseManager em modo desenvolvimento (sem banco)")
                 
@@ -589,5 +686,6 @@ def get_database_manager():
     return db_manager
 
 # Inicialização controlada
+import time
 logger.info("📦 Inicializando db_models.py...")
 db_manager = get_database_manager()

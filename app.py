@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# ✅ CONFIGURAÇÃO DE SESSÃO CORRIGIDA - SISTEMA PROFISSIONAL
+# ✅ CONFIGURAÇÃO DE SESSÃO OTIMIZADA PARA JOGOS
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SECURE=True,  # ✅ HTTPS no Render.com
     SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=24),  # ✅ 24 horas para jogos
-    SESSION_REFRESH_EACH_REQUEST=False  # ✅ Não renovar automaticamente
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7),  # ✅ 7 DIAS para jogos
+    SESSION_REFRESH_EACH_REQUEST=True  # ✅ RENOVAR a cada requisição
 )
 
 # Importar managers
@@ -61,61 +61,40 @@ def get_firebase_config():
             firebase_config_cache = {}
     return firebase_config_cache or {}
 
-# ✅ MIDDLEWARE DE SESSÃO CORRIGIDO
+# ✅ MIDDLEWARE DE SESSÃO SIMPLIFICADO E OTIMIZADO
 @app.before_request
-def check_session_and_security():
-    """✅ SISTEMA DE SESSÃO PROFISSIONAL - Como em jogos reais"""
+def handle_session_management():
+    """✅ SISTEMA DE SESSÃO SIMPLIFICADO - Foco em estabilidade"""
     
-    # ✅ NUNCA usar sessão permanente para jogos - fechar navegador = logout
-    session.permanent = False
+    # ✅ SEMPRE usar sessão permanente para jogos
+    session.permanent = True
     
     paths_that_require_auth = ['/game', '/profile', '/api/game', '/api/user']
     current_path = request.path
     
+    # ✅ Verificar se é uma rota que requer autenticação
+    requires_auth = any(current_path.startswith(path) for path in paths_that_require_auth)
+    
     # ✅ Se não tem usuário na sessão e está tentando acessar área protegida
-    if not session.get('user') and any(current_path.startswith(path) for path in paths_that_require_auth):
+    if requires_auth and not session.get('user'):
         logger.warning(f"🚫 Acesso não autorizado à: {current_path}")
         if request.path.startswith('/api/'):
             return jsonify({'error': 'Não autenticado'}), 401
         return redirect('/')
     
-    # ✅ Se tem usuário, verificar inatividade
+    # ✅ ATUALIZAR atividade APENAS se usuário estiver logado
     user_info = session.get('user')
     if user_info:
-        last_activity = user_info.get('last_activity')
-        
-        # ✅ VERIFICAÇÃO DE INATIVIDADE: 2 horas para jogos
-        if last_activity:
-            try:
-                last_activity_time = datetime.fromisoformat(last_activity)
-                inactivity_period = (datetime.now() - last_activity_time).total_seconds()
-                
-                # ✅ 2 horas de inatividade = logout automático
-                if inactivity_period > 7200:  # 2 horas em segundos
-                    logger.info(f"🕐 Sessão expirada por inatividade: {user_info.get('email')}")
-                    session.clear()
-                    
-                    if request.path.startswith('/api/'):
-                        return jsonify({'error': 'Sessão expirada'}), 401
-                    return redirect('/')
-                    
-            except Exception as e:
-                logger.warning(f"⚠️ Erro ao verificar inatividade: {e}")
-                session.clear()
-                return redirect('/')
-        
-        # ✅ ATUALIZAR atividade APENAS a cada 5 minutos para evitar sobrecarga
-        current_time = datetime.now()
-        if not last_activity or (current_time - datetime.fromisoformat(last_activity)).total_seconds() > 300:
-            user_info['last_activity'] = current_time.isoformat()
-            session['user'] = user_info
-            session.modified = True
+        # ✅ Atualizar atividade a cada requisição (mais simples)
+        user_info['last_activity'] = datetime.now().isoformat()
+        session['user'] = user_info
+        # Não forçar session.modified = True para melhor performance
 
 # ========== ROTAS PRINCIPAIS ==========
 
 @app.route('/')
 def index():
-    """Página inicial - sempre começa deslogado"""
+    """Página inicial - sistema inteligente de redirecionamento"""
     logger.info("🏠 Página inicial - Verificando sessão...")
     
     user_info = session.get('user')
@@ -168,7 +147,7 @@ def profile():
 
 @app.route('/api/auth/status')
 def auth_status():
-    """✅ VERIFICAÇÃO SIMPLES DE STATUS - sem atualizar atividade"""
+    """✅ VERIFICAÇÃO SIMPLES DE STATUS - sem lógica complexa"""
     try:
         user_info = session.get('user')
         
@@ -176,7 +155,13 @@ def auth_status():
             logger.debug(f"📡 Status: Usuário logado - {user_info.get('email')}")
             return jsonify({
                 'authenticated': True,
-                'user': user_info
+                'user': {
+                    'uid': user_info.get('uid'),
+                    'email': user_info.get('email'),
+                    'name': user_info.get('name'),
+                    'picture': user_info.get('picture'),
+                    'email_verified': user_info.get('email_verified', False)
+                }
             })
         else:
             logger.debug("📡 Status: Usuário deslogado")
@@ -191,7 +176,7 @@ def auth_status():
 
 @app.route('/api/auth/login', methods=['POST'])
 def auth_login():
-    """✅ PROCESSAR LOGIN - Versão Corrigida"""
+    """✅ PROCESSAR LOGIN - Versão Simplificada e Robusta"""
     if not auth_manager:
         return jsonify({'error': 'Sistema de autenticação não disponível'}), 503
     
@@ -211,7 +196,7 @@ def auth_login():
 
         current_time = datetime.now().isoformat()
         
-        # ✅ DADOS ESSENCIAIS DO USUÁRIO
+        # ✅ DADOS ESSENCIAIS DO USUÁRIO (minimais)
         session_user_data = {
             'uid': user_info['uid'],
             'email': user_info['email'],
@@ -223,34 +208,39 @@ def auth_login():
             'last_activity': current_time
         }
         
-        # ✅ CARREGAR DADOS EXISTENTES OU CRIAR NOVOS
+        # ✅ TENTAR CARREGAR DADOS EXISTENTES DO BANCO
         if db_manager:
             try:
                 existing_data = db_manager.get_user_data(user_info['uid'])
                 if existing_data:
-                    # ✅ MESCLAR dados existentes com novos
-                    existing_data.update({
+                    # ✅ PRESERVAR dados importantes existentes
+                    session_user_data.update({
+                        'game_data': existing_data.get('game_data', {}),
+                        'preferences': existing_data.get('preferences', {
+                            'notifications': True,
+                            'sound_effects': True,
+                            'music': True
+                        }),
                         'last_login': current_time,
-                        'last_activity': current_time,
-                        'name': session_user_data['name'],
-                        'picture': session_user_data['picture'],
-                        'email_verified': session_user_data['email_verified']
+                        'last_activity': current_time
                     })
-                    session_user_data = existing_data
                     logger.info(f"✅ Dados existentes carregados: {user_info['uid']}")
                 else:
                     # ✅ DADOS INICIAIS PARA NOVO USUÁRIO
                     session_user_data.update({
                         'game_data': {
-                            'popcoins': 0,
-                            'clicks': 0,
-                            'level': 1,
-                            'experience': 0,
+                            'coins': 0,
                             'coins_per_click': 1,
                             'coins_per_second': 0,
                             'total_coins': 0,
                             'prestige_level': 0,
-                            'upgrades': {},
+                            'upgrades': {
+                                'click_power': 1,
+                                'auto_clickers': 0,
+                                'click_bots': 0
+                            },
+                            'click_count': 0,
+                            'last_update': time.time(),
                             'inventory': [],
                             'achievements': []
                         },
@@ -266,10 +256,27 @@ def auth_login():
                 db_manager.save_user_data(user_info['uid'], session_user_data)
                 
             except Exception as db_error:
-                logger.warning(f"⚠️ Erro no banco: {db_error}")
-                # Continuar mesmo sem banco
+                logger.warning(f"⚠️ Erro no banco, usando dados locais: {db_error}")
+                # Usar dados mínimos se o banco falhar
+                if 'game_data' not in session_user_data:
+                    session_user_data['game_data'] = {
+                        'coins': 0,
+                        'coins_per_click': 1,
+                        'coins_per_second': 0,
+                        'total_coins': 0,
+                        'prestige_level': 0,
+                        'upgrades': {
+                            'click_power': 1,
+                            'auto_clickers': 0,
+                            'click_bots': 0
+                        },
+                        'click_count': 0,
+                        'last_update': time.time(),
+                        'inventory': [],
+                        'achievements': []
+                    }
         
-        # ✅ CRIAR SESSÃO
+        # ✅ CRIAR SESSÃO (agora permanente)
         session['user'] = session_user_data
         session['user_id'] = user_info['uid']
         
@@ -287,7 +294,7 @@ def auth_login():
 
 @app.route('/api/auth/logout', methods=['POST'])
 def auth_logout():
-    """✅ LOGOUT COMPLETO - Versão Corrigida"""
+    """✅ LOGOUT COMPLETO - Versão Simplificada"""
     try:
         user_info = session.get('user')
         
@@ -340,14 +347,13 @@ def user_sync():
         updated = False
         
         for field in allowed_updates:
-            if field in data and data[field] != user_info.get(field):
+            if field in data:
                 user_info[field] = data[field]
                 updated = True
         
         if updated:
             user_info['last_activity'] = datetime.now().isoformat()
             session['user'] = user_info
-            session.modified = True
             
             if db_manager:
                 try:
@@ -364,7 +370,7 @@ def user_sync():
 
 @app.route('/api/user/profile', methods=['GET', 'PUT'])
 def user_profile():
-    """✅ OBTER OU ATUALIZAR PERFIL - Versão Corrigida"""
+    """✅ OBTER OU ATUALIZAR PERFIL - Versão Simplificada"""
     user_info = session.get('user')
     if not user_info:
         return jsonify({'error': 'Não autenticado'}), 401
@@ -381,25 +387,13 @@ def user_profile():
             
             # ✅ CAMPOS PERMITIDOS PARA ATUALIZAÇÃO
             allowed_fields = ['name', 'preferences']
-            updates = {}
             
             for field in allowed_fields:
                 if field in data:
-                    if field == 'preferences':
-                        # ✅ MESCLAR preferências em vez de substituir
-                        current_prefs = user_info.get('preferences', {})
-                        if isinstance(data['preferences'], dict):
-                            current_prefs.update(data['preferences'])
-                        updates['preferences'] = current_prefs
-                    else:
-                        updates[field] = data[field]
+                    user_info[field] = data[field]
             
-            # ✅ APLICAR ATUALIZAÇÕES
-            user_info.update(updates)
             user_info['last_activity'] = datetime.now().isoformat()
-            
             session['user'] = user_info
-            session.modified = True
             
             # ✅ SALVAR NO BANCO
             if db_manager:
@@ -424,53 +418,59 @@ def user_profile():
 
 @app.route('/api/game/state', methods=['GET', 'POST'])
 def game_state():
-    """✅ OBTER OU SALVAR ESTADO DO JOGO - Versão Corrigida"""
+    """✅ OBTER OU SALVAR ESTADO DO JOGO - Versão Robusta"""
     user_info = session.get('user')
     if not user_info:
         return jsonify({'error': 'Não autenticado'}), 401
 
     user_id = user_info['uid']
 
-    # ✅ SE NÃO TEM GAME MANAGER, USAR DADOS DA SESSÃO
-    if not game_manager:
-        game_data = user_info.get('game_data', {})
-        
+    try:
         if request.method == 'GET':
+            # ✅ PRIORIDADE: Dados da sessão primeiro
+            game_data = user_info.get('game_data', {})
+            
+            # ✅ SE game_manager disponível, tentar carregar do banco
+            if game_manager and not game_data:
+                try:
+                    game_data = game_manager.get_user_game_state(user_id)
+                    # ✅ ATUALIZAR sessão com dados do banco
+                    user_info['game_data'] = game_data
+                    session['user'] = user_info
+                except Exception as mgr_error:
+                    logger.warning(f"⚠️ Erro no game_manager: {mgr_error}")
+            
             return jsonify(game_data)
-        else:
+            
+        else:  # POST - Salvar estado
             data = request.get_json()
+            
             # ✅ ATUALIZAR DADOS DO JOGO NA SESSÃO
             user_info['game_data'] = data
             user_info['last_activity'] = datetime.now().isoformat()
             session['user'] = user_info
-            session.modified = True
             
-            # ✅ SALVAR NO BANCO
+            # ✅ SALVAR NO BANCO (se disponível)
+            save_success = True
+            if game_manager:
+                try:
+                    save_success = game_manager.save_game_state(user_id, data)
+                except Exception as mgr_error:
+                    logger.warning(f"⚠️ Erro ao salvar no game_manager: {mgr_error}")
+                    save_success = False
+            
+            # ✅ SALVAR NO db_manager também
             if db_manager:
                 try:
                     db_manager.save_user_data(user_id, user_info)
                 except Exception as db_error:
-                    logger.warning(f"⚠️ Erro ao salvar estado do jogo: {db_error}")
+                    logger.warning(f"⚠️ Erro ao salvar no banco: {db_error}")
             
-            return jsonify({'success': True})
-
-    try:
-        if request.method == 'GET':
-            game_state = game_manager.get_user_game_state(user_id)
-            return jsonify(game_state)
-        else:
-            data = request.get_json()
-            success = game_manager.save_game_state(user_id, data)
+            return jsonify({'success': save_success})
             
-            # ✅ ATUALIZAR ATIVIDADE
-            user_info['last_activity'] = datetime.now().isoformat()
-            session['user'] = user_info
-            session.modified = True
-            
-            return jsonify({'success': success})
     except Exception as e:
         logger.error(f"❌ Erro no game_state: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Erro interno no servidor'}), 500
 
 @app.route('/api/user/ranking', methods=['GET'])
 def get_ranking():
@@ -481,10 +481,14 @@ def get_ranking():
             return jsonify({'success': True, 'ranking': ranking})
         else:
             # ✅ RANKING MOCK PARA TESTES
+            user_info = session.get('user')
             mock_ranking = [
-                {'uid': 'user_1', 'name': 'Jogador Top', 'popcoins': 15000, 'level': 15},
-                {'uid': 'user_2', 'name': 'Clique Mestre', 'popcoins': 12000, 'level': 12},
-                {'uid': 'user_3', 'name': 'Coletor Ávido', 'popcoins': 8000, 'level': 10}
+                {'uid': 'user_1', 'name': 'Jogador Top', 'total_coins': 15000, 'level': 15},
+                {'uid': 'user_2', 'name': 'Clique Mestre', 'total_coins': 12000, 'level': 12},
+                {'uid': user_info.get('uid') if user_info else 'user_3', 
+                 'name': user_info.get('name') if user_info else 'Você', 
+                 'total_coins': user_info.get('game_data', {}).get('total_coins', 0) if user_info else 8000, 
+                 'level': 10}
             ]
             return jsonify({'success': True, 'ranking': mock_ranking})
             
@@ -527,7 +531,8 @@ def debug_session():
         'user_authenticated': bool(user_info),
         'user_email': user_info.get('email') if user_info else None,
         'last_activity': user_info.get('last_activity') if user_info else None,
-        'session_keys': list(session.keys())
+        'session_keys': list(session.keys()),
+        'game_data_keys': list(user_info.get('game_data', {}).keys()) if user_info else []
     }
     return jsonify(session_info)
 
@@ -551,7 +556,7 @@ if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     
     logger.info(f"🚀 Iniciando PopCoin IDLE na porta {port}")
-    logger.info(f"⏰ Sistema de sessão: 2h inatividade = logout automático")
-    logger.info(f"🔒 Sessão não-permanente: Fechar navegador = logout")
+    logger.info(f"⏰ Sistema de sessão: 7 dias de duração")
+    logger.info(f"🔄 Sessão permanente: Mantém login entre abas/navegador")
     
     app.run(host='0.0.0.0', port=port, debug=debug_mode)

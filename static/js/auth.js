@@ -4,6 +4,7 @@ class AuthManager {
         this.user = null;
         this.isAuthenticated = false;
         this.initialized = false;
+        this.authChecked = false;
         
         console.log('🔄 AuthManager inicializando...');
     }
@@ -18,11 +19,13 @@ class AuthManager {
             
             // ✅ VERIFICAÇÃO ÚNICA - não fazer verificação constante
             await this.checkInitialAuth();
+            this.authChecked = true;
             
             this.initialized = true;
             console.log('✅ AuthManager inicializado com sucesso');
         } catch (error) {
             console.error('❌ Falha na inicialização:', error);
+            this.authChecked = true; // Marcar como verificado mesmo em caso de erro
         }
     }
 
@@ -185,6 +188,23 @@ class AuthManager {
             this.handleUserLogout();
             window.location.href = '/';
         }
+    }
+
+    // ✅ MÉTODOS NOVOS ADICIONADOS PARA CORRIGIR O ERRO
+    isUserAuthenticated() {
+        return this.isAuthenticated && this.user !== null;
+    }
+
+    getAuthState() {
+        return {
+            isAuthenticated: this.isAuthenticated,
+            user: this.user,
+            authChecked: this.authChecked
+        };
+    }
+
+    isAuthChecked() {
+        return this.authChecked;
     }
 
     updateUI(user) {
