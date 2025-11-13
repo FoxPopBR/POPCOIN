@@ -8,11 +8,14 @@
     <div class="game-header">
         <div class="game-title">
             <h1>🎮 PopCoin IDLE</h1>
-            <!-- ✅ CORREÇÃO: Adicionado link para perfil no header do jogo -->
+            <!-- ✅ CORREÇÃO: Link para perfil -->
             <div class="game-header-actions">
                 <a href="{{ url_for('profile') }}" class="btn btn-secondary btn-small">
                     👤 Meu Perfil
                 </a>
+                <button onclick="window.logout()" class="btn btn-danger btn-small">
+                    🚪 Sair
+                </button>
             </div>
         </div>
         
@@ -60,6 +63,7 @@
             <div class="panel upgrades-panel">
                 <h3>🏗️ Sistema de Upgrades</h3>
                 <div class="upgrade-list">
+                    <!-- ✅ CORREÇÃO: data-upgrade correto -->
                     <div class="upgrade-item" data-upgrade="click_power">
                         <div class="upgrade-info">
                             <h4>💪 Força do Clique</h4>
@@ -69,12 +73,13 @@
                                 <span>Bônus: +<strong id="click-power-bonus">1</strong> por clique</span>
                             </div>
                         </div>
-                        <button class="buy-button" data-cost="10" data-upgrade-type="click_power">
+                        <button class="buy-button" data-cost="10">
                             Comprar - <span class="cost">10</span> 🪙
                         </button>
                     </div>
 
-                    <div class="upgrade-item" data-upgrade="auto_clicker">
+                    <!-- ✅ CORREÇÃO: data-upgrade correto -->
+                    <div class="upgrade-item" data-upgrade="auto_clickers">
                         <div class="upgrade-info">
                             <h4>🤖 Clique Automático</h4>
                             <p>Gera moedas automaticamente a cada segundo</p>
@@ -83,12 +88,13 @@
                                 <span>Produção: +<strong id="auto-clicker-bonus">0.0</strong>/s</span>
                             </div>
                         </div>
-                        <button class="buy-button" data-cost="50" data-upgrade-type="auto_clicker">
+                        <button class="buy-button" data-cost="50">
                             Comprar - <span class="cost">50</span> 🪙
                         </button>
                     </div>
 
-                    <div class="upgrade-item" data-upgrade="click_bot">
+                    <!-- ✅ CORREÇÃO: data-upgrade correto -->
+                    <div class="upgrade-item" data-upgrade="click_bots">
                         <div class="upgrade-info">
                             <h4>🏭 Bot de Clique</h4>
                             <p>Robôs avançados que geram mais moedas</p>
@@ -97,7 +103,7 @@
                                 <span>Produção: +<strong id="click-bot-bonus">0.0</strong>/s</span>
                             </div>
                         </div>
-                        <button class="buy-button" data-cost="500" data-upgrade-type="click_bot">
+                        <button class="buy-button" data-cost="500">
                             Comprar - <span class="cost">500</span> 🪙
                         </button>
                     </div>
@@ -108,7 +114,7 @@
             <div class="panel achievements-panel">
                 <h3>🏆 Sistema de Conquistas</h3>
                 <div id="achievements-list" class="achievements-list">
-                    <!-- As conquistas serão carregadas dinamicamente -->
+                    <!-- Conquistas carregadas dinamicamente pelo game.js -->
                 </div>
             </div>
 
@@ -131,98 +137,31 @@
     <!-- Status do Jogo -->
     <div class="game-footer">
         <div class="game-status">
-            <span id="save-status">✅ Jogo salvo automaticamente</span>
-            <span class="server-status">🟢 Servidor online</span>
+            <span id="save-status">💾 Aguardando primeira ação...</span>
+            <span class="server-status">🟢 Conectado</span>
         </div>
     </div>
 </div>
 
-<!-- Loading Overlay do Jogo -->
+<!-- ✅ CORREÇÃO: Loading overlay simplificado -->
 <div id="game-loading-overlay" class="loading-overlay">
     <div class="loading-content">
         <div class="loading-spinner"></div>
         <h3>Carregando PopCoin IDLE...</h3>
         <p>Preparando sua aventura de coleta de moedas!</p>
-    </div>
-</div>
-
-<!-- ✅ CORREÇÃO: Overlay de acesso não autorizado -->
-<div id="unauthorized-overlay" class="loading-overlay" style="display: none; background: rgba(220, 53, 69, 0.95);">
-    <div class="loading-content">
-        <div style="font-size: 4rem; margin-bottom: 1rem;">🚫</div>
-        <h3>Acesso Não Autorizado</h3>
-        <p>Você precisa estar logado para acessar o jogo.</p>
-        <p>Redirecionando para a página inicial...</p>
-        <div class="loading-spinner" style="border-top: 4px solid white; margin: 2rem auto;"></div>
+        <div id="auth-status" style="margin-top: 1rem; font-size: 0.9rem; opacity: 0.8;">
+            🔐 Verificando autenticação...
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<!-- ✅ CORREÇÃO: Script de verificação de autenticação -->
-<script>
-// Verificação de autenticação antes de carregar o jogo
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🎮 Verificando autenticação para acesso ao jogo...');
-    
-    const checkAuth = async () => {
-        const gameOverlay = document.getElementById('game-loading-overlay');
-        const unauthorizedOverlay = document.getElementById('unauthorized-overlay');
-        
-        // Mostrar loading inicial
-        if (gameOverlay) gameOverlay.style.display = 'flex';
-        
-        // Aguardar o authManager estar disponível
-        let attempts = 0;
-        while (!window.authManager && attempts < 50) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
-        }
-        
-        if (!window.authManager) {
-            console.error('❌ AuthManager não carregado');
-            showUnauthorized();
-            return;
-        }
-        
-        // Aguardar verificação de autenticação
-        attempts = 0;
-        while (!window.authManager.authChecked && attempts < 50) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
-        }
-        
-        if (!window.authManager.isAuthenticated) {
-            console.log('❌ Usuário não autenticado, redirecionando...');
-            showUnauthorized();
-            return;
-        }
-        
-        console.log('✅ Usuário autenticado, carregando jogo...');
-        // O jogo será carregado pelo game.js
-    };
-    
-    function showUnauthorized() {
-        const gameOverlay = document.getElementById('game-loading-overlay');
-        const unauthorizedOverlay = document.getElementById('unauthorized-overlay');
-        
-        if (gameOverlay) gameOverlay.style.display = 'none';
-        if (unauthorizedOverlay) unauthorizedOverlay.style.display = 'flex';
-        
-        // Redirecionar após 3 segundos
-        setTimeout(() => {
-            window.location.href = '/';
-        }, 3000);
-    }
-    
-    checkAuth();
-});
-</script>
-
+<!-- ✅ CORREÇÃO: Script limpo - toda lógica no game.js -->
 <script src="{{ url_for('static', filename='js/game.js') }}"></script>
 
 <style>
-/* ESTILOS ESPECÍFICOS DO JOGO - EVITAR CONFLITO COM BASE.CSS */
+/* ESTILOS ESPECÍFICOS DO JOGO */
 .game-container {
     max-width: 1200px;
     margin: 0 auto;
@@ -250,7 +189,6 @@ document.addEventListener('DOMContentLoaded', function() {
     font-size: 2rem;
 }
 
-/* ✅ CORREÇÃO: Estilos para ações do header do jogo */
 .game-header-actions {
     display: flex;
     gap: 0.5rem;
@@ -260,6 +198,30 @@ document.addEventListener('DOMContentLoaded', function() {
     padding: 0.5rem 1rem;
     font-size: 0.8rem;
     border-radius: 20px;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-secondary {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.3);
+}
+
+.btn-secondary:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+.btn-danger {
+    background: rgba(220, 53, 69, 0.8);
+    color: white;
+    border: 1px solid rgba(220, 53, 69, 0.9);
+}
+
+.btn-danger:hover {
+    background: rgba(220, 53, 69, 1);
 }
 
 .game-stats {
@@ -518,7 +480,7 @@ document.addEventListener('DOMContentLoaded', function() {
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 9998;
+    z-index: 9999;
 }
 
 .loading-content {

@@ -9,11 +9,11 @@
             <div class="game-title">
                 <h1>👤 Meu Perfil</h1>
                 <div class="profile-actions">
-                    <!-- ✅ CORREÇÃO: Botão PRINCIPAL "Jogar" em destaque -->
-                    <button id="play-button" class="btn btn-primary btn-large" onclick="redirectToGame()">
+                    <!-- ✅ CORREÇÃO: Botões simplificados -->
+                    <button class="btn btn-primary btn-large" onclick="redirectToGame()">
                         🎮 Jogar Agora
                     </button>
-                    <button class="btn btn-secondary" onclick="window.profileManager?.loadProfile()">
+                    <button class="btn btn-secondary" onclick="window.location.reload()">
                         🔄 Atualizar
                     </button>
                 </div>
@@ -31,7 +31,7 @@
                     <div class="profile-info">
                         <div class="profile-avatar-section">
                             <div class="profile-avatar">
-                                <!-- ✅ CORREÇÃO: Avatar com fallback robusto -->
+                                <!-- ✅ CORREÇÃO: Avatar simplificado -->
                                 <img id="profile-avatar-img" src="/static/images/default-avatar.png" alt="Avatar" class="user-avatar large">
                                 <div class="avatar-actions">
                                     <span class="avatar-status" id="avatar-status">Carregando...</span>
@@ -78,14 +78,14 @@
                             <span class="stat-icon">🪙</span>
                             <div class="stat-content">
                                 <span class="stat-label">PopCoins Atuais</span>
-                                <span class="stat-value" id="stat-popcoins">0</span>
+                                <span class="stat-value" id="stat-coins">0</span>
                             </div>
                         </div>
                         <div class="stat-item">
                             <span class="stat-icon">👆</span>
                             <div class="stat-content">
                                 <span class="stat-label">Total de Cliques</span>
-                                <span class="stat-value" id="stat-clicks">0</span>
+                                <span class="stat-value" id="stat-click-count">0</span>
                             </div>
                         </div>
                         <div class="stat-item">
@@ -99,7 +99,7 @@
                             <span class="stat-icon">📈</span>
                             <div class="stat-content">
                                 <span class="stat-label">Experiência</span>
-                                <span class="stat-value" id="stat-exp">0</span>
+                                <span class="stat-value" id="stat-experience">0</span>
                             </div>
                         </div>
                         <div class="stat-item">
@@ -204,9 +204,6 @@
                 <div class="profile-card">
                     <h3>🔒 Gerenciamento de Conta</h3>
                     <div class="account-actions">
-                        <button class="btn btn-warning" onclick="changePassword()">
-                            🔑 Alterar Senha
-                        </button>
                         <button class="btn btn-danger" onclick="exportData()">
                             📤 Exportar Dados
                         </button>
@@ -219,8 +216,8 @@
                         <h4>Informações da Sessão</h4>
                         <div class="session-info">
                             <div class="session-item">
-                                <span>Último login:</span>
-                                <span id="last-login">-</span>
+                                <span>Última atividade:</span>
+                                <span id="last-activity">-</span>
                             </div>
                             <div class="session-item">
                                 <span>Sessão ativa desde:</span>
@@ -238,7 +235,7 @@
     </div>
 </div>
 
-<!-- Loading overlay específico para o perfil -->
+<!-- Loading overlay simplificado -->
 <div id="profile-loading-overlay" class="loading-overlay" style="display: none;">
     <div class="loading-content">
         <div class="loading-spinner"></div>
@@ -254,40 +251,18 @@ class ProfileManager {
     constructor() {
         this.userProfile = null;
         this.originalData = null;
-        this.init();
+        console.log('👤 Inicializando ProfileManager...');
     }
 
     async init() {
-        console.log('👤 Inicializando ProfileManager...');
-        
-        if (!await this.checkAuthentication()) {
+        // ✅ CORREÇÃO: Verificação simples de autenticação
+        if (!window.authManager || !window.authManager.isUserAuthenticated()) {
+            this.showUnauthorizedMessage();
             return;
         }
         
         await this.loadProfile();
         this.setupEventListeners();
-        this.startAutoRefresh();
-    }
-
-    async checkAuthentication() {
-        // ✅ CORREÇÃO: Verificação simplificada e direta
-        if (!window.authManager) {
-            console.log('⏳ Aguardando authManager...');
-            let attempts = 0;
-            while (!window.authManager && attempts < 30) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-                attempts++;
-            }
-        }
-
-        if (!window.authManager || !window.authManager.isAuthenticated) {
-            this.showMessage('❌ Você precisa estar logado para acessar esta página', 'error');
-            setTimeout(() => window.location.href = '/', 2000);
-            return false;
-        }
-        
-        console.log('✅ Usuário autenticado:', window.authManager.user?.email);
-        return true;
     }
 
     async loadProfile() {
@@ -295,14 +270,8 @@ class ProfileManager {
             console.log('📥 Carregando perfil do usuário...');
             this.showProfileLoading(true);
 
-            // ✅ CORREÇÃO: Usar endpoint direto sem token (sessão já está ativa)
-            const response = await fetch('/api/user/profile');
-
-            if (response.status === 401) {
-                this.showMessage('🔐 Sessão expirada. Redirecionando...', 'error');
-                setTimeout(() => window.location.href = '/', 2000);
-                return;
-            }
+            // ✅ CORREÇÃO: Usar authFetch em vez de fetch normal
+            const response = await window.authFetch('/api/user/profile');
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -314,19 +283,12 @@ class ProfileManager {
                 this.userProfile = data.profile;
                 this.originalData = JSON.parse(JSON.stringify(this.userProfile));
                 this.updateProfileUI();
-                console.log('✅ Perfil carregado com sucesso:', this.userProfile.email);
+                console.log('✅ Perfil carregado com sucesso');
             } else {
                 throw new Error(data.error || 'Erro ao carregar perfil');
             }
         } catch (error) {
             console.error('❌ Erro ao carregar perfil:', error);
-            
-            if (error.message.includes("autenticado") || error.message.includes("autorizado")) {
-                this.showMessage('🔐 Sessão expirada. Redirecionando...', 'error');
-                setTimeout(() => window.location.href = '/', 2000);
-                return;
-            }
-            
             this.showMessage('❌ Erro ao carregar perfil: ' + error.message, 'error');
         } finally {
             this.showProfileLoading(false);
@@ -358,7 +320,7 @@ class ProfileManager {
             document.getElementById('profile-created').value = new Date().toLocaleDateString('pt-BR');
         }
 
-        // ✅ CORREÇÃO CRÍTICA: Avatar com fallback robusto
+        // ✅ CORREÇÃO: Avatar simplificado
         this.loadAvatar();
 
         // Estatísticas do jogo
@@ -381,24 +343,15 @@ class ProfileManager {
         const avatarImg = document.getElementById('profile-avatar-img');
         const avatarStatus = document.getElementById('avatar-status');
         
-        if (!avatarImg) {
-            console.error('❌ Elemento do avatar não encontrado');
-            return;
-        }
+        if (!avatarImg) return;
 
-        // ✅ CORREÇÃO: Lógica robusta de carregamento de avatar
-        const avatarUrl = this.userProfile.picture || this.userProfile.photoURL || '/static/images/default-avatar.png';
+        // ✅ CORREÇÃO: Avatar do authManager
+        const user = window.authManager.user;
+        const avatarUrl = user?.picture || user?.photoURL || '/static/images/default-avatar.png';
         
-        console.log('🖼️ Tentando carregar avatar:', avatarUrl);
-        
-        // Resetar eventos anteriores
-        avatarImg.onerror = null;
-        avatarImg.onload = null;
-
         avatarImg.src = avatarUrl;
         
-        // Verificar se é uma URL do Google
-        if (avatarUrl.includes('googleusercontent.com') || avatarUrl.includes('ggpht.com')) {
+        if (avatarUrl.includes('googleusercontent.com')) {
             avatarStatus.textContent = 'Foto do Google';
             avatarStatus.style.color = '#28a745';
         } else if (avatarUrl === '/static/images/default-avatar.png') {
@@ -409,44 +362,27 @@ class ProfileManager {
             avatarStatus.style.color = '#007bff';
         }
 
-        // ✅ CORREÇÃO: Fallback robusto para erro de carregamento
+        // Fallback para erro
         avatarImg.onerror = function() {
-            console.log('❌ Erro ao carregar avatar, usando fallback');
             this.src = '/static/images/default-avatar.png';
-            this.onerror = null; // Prevenir loop infinito
-            avatarStatus.textContent = 'Erro ao carregar foto';
+            avatarStatus.textContent = 'Erro ao carregar';
             avatarStatus.style.color = '#dc3545';
-        };
-
-        avatarImg.onload = function() {
-            console.log('✅ Avatar carregado com sucesso');
         };
     }
 
     updateGameStats() {
-        if (this.userProfile.game_data) {
-            const gameData = this.userProfile.game_data;
-            
-            // ✅ CORREÇÃO: Valores padrão para evitar undefined
-            document.getElementById('stat-popcoins').textContent = this.formatNumber(gameData.popcoins || 0);
-            document.getElementById('stat-clicks').textContent = this.formatNumber(gameData.clicks || 0);
-            document.getElementById('stat-level').textContent = gameData.level || 1;
-            document.getElementById('stat-exp').textContent = this.formatNumber(gameData.experience || 0);
-            document.getElementById('stat-coins-per-click').textContent = gameData.coins_per_click || 1;
-            document.getElementById('stat-coins-per-second').textContent = (gameData.coins_per_second || 0).toFixed(1);
-            
-            // Progresso do nível
-            this.updateLevelProgress(gameData.experience || 0, gameData.level || 1);
-        } else {
-            // ✅ CORREÇÃO: Dados padrão se não houver game_data
-            document.getElementById('stat-popcoins').textContent = '0';
-            document.getElementById('stat-clicks').textContent = '0';
-            document.getElementById('stat-level').textContent = '1';
-            document.getElementById('stat-exp').textContent = '0';
-            document.getElementById('stat-coins-per-click').textContent = '1';
-            document.getElementById('stat-coins-per-second').textContent = '0.0';
-            this.updateLevelProgress(0, 1);
-        }
+        // ✅ CORREÇÃO: Usar estrutura real do jogo
+        const gameData = this.userProfile.game_data || {};
+        
+        document.getElementById('stat-coins').textContent = this.formatNumber(gameData.coins || 0);
+        document.getElementById('stat-click-count').textContent = this.formatNumber(gameData.click_count || 0);
+        document.getElementById('stat-level').textContent = gameData.level || 1;
+        document.getElementById('stat-experience').textContent = this.formatNumber(gameData.experience || 0);
+        document.getElementById('stat-coins-per-click').textContent = gameData.coins_per_click || 1;
+        document.getElementById('stat-coins-per-second').textContent = (gameData.coins_per_second || 0).toFixed(1);
+        
+        // Progresso do nível
+        this.updateLevelProgress(gameData.experience || 0, gameData.level || 1);
     }
 
     updateLevelProgress(exp, level) {
@@ -463,7 +399,7 @@ class ProfileManager {
     }
 
     updatePreferences() {
-        // ✅ CORREÇÃO: Valores padrão para preferências
+        // ✅ CORREÇÃO: Preferências do perfil
         const prefs = this.userProfile.preferences || {};
         
         document.getElementById('pref-notifications').checked = prefs.notifications !== false;
@@ -473,11 +409,12 @@ class ProfileManager {
     }
 
     updateSessionInfo() {
-        if (this.userProfile.last_login) {
-            const lastLogin = new Date(this.userProfile.last_login).toLocaleString('pt-BR');
-            document.getElementById('last-login').textContent = lastLogin;
+        // ✅ CORREÇÃO: Informações de sessão simplificadas
+        if (this.userProfile.last_activity) {
+            const lastActivity = new Date(this.userProfile.last_activity).toLocaleString('pt-BR');
+            document.getElementById('last-activity').textContent = lastActivity;
         } else {
-            document.getElementById('last-login').textContent = 'Agora';
+            document.getElementById('last-activity').textContent = 'Agora';
         }
 
         document.getElementById('session-start').textContent = new Date().toLocaleString('pt-BR');
@@ -495,7 +432,8 @@ class ProfileManager {
 
     async loadRanking() {
         try {
-            const response = await fetch('/api/user/ranking');
+            // ✅ CORREÇÃO: Usar authFetch
+            const response = await window.authFetch('/api/user/ranking');
             if (response.ok) {
                 const data = await response.json();
                 this.updateRankingUI(data.ranking);
@@ -512,7 +450,7 @@ class ProfileManager {
         if (currentUser) {
             const userIndex = ranking.indexOf(currentUser);
             document.getElementById('global-rank').textContent = `#${userIndex + 1}`;
-            document.getElementById('total-score').textContent = this.formatNumber(currentUser.popcoins || 0);
+            document.getElementById('total-score').textContent = this.formatNumber(currentUser.total_coins || 0);
         } else {
             document.getElementById('global-rank').textContent = '#-';
             document.getElementById('total-score').textContent = '0';
@@ -520,43 +458,16 @@ class ProfileManager {
     }
 
     loadAchievements() {
-        // ✅ CORREÇÃO: Conquistas baseadas no progresso real
+        // ✅ CORREÇÃO: Conquistas da estrutura real
         const gameData = this.userProfile.game_data || {};
-        const achievements = [
-            { 
-                id: 'first_coin', 
-                name: '💰 Primeira Moeda', 
-                description: 'Ganhe sua primeira moeda', 
-                unlocked: (gameData.popcoins || 0) > 0 
-            },
-            { 
-                id: 'clicker', 
-                name: '👆 Clique Inicial', 
-                description: 'Faça 10 cliques', 
-                unlocked: (gameData.clicks || 0) >= 10 
-            },
-            { 
-                id: 'collector', 
-                name: '🏆 Colecionador', 
-                description: 'Acumule 1000 moedas', 
-                unlocked: (gameData.popcoins || 0) >= 1000 
-            },
-            { 
-                id: 'upgrader', 
-                name: '⚡ Upgrade Mestre', 
-                description: 'Alcance o nível 5', 
-                unlocked: (gameData.level || 0) >= 5 
-            }
-        ];
-
+        const achievements = gameData.achievements || [];
+        
         const achievementsList = document.getElementById('profile-achievements');
         if (!achievementsList) return;
         
         achievementsList.innerHTML = '';
 
-        const unlockedCount = achievements.filter(a => a.unlocked).length;
-        
-        if (unlockedCount === 0) {
+        if (achievements.length === 0) {
             achievementsList.innerHTML = `
                 <div class="achievement-placeholder">
                     🎯 Complete desafios no jogo para desbloquear conquistas!
@@ -565,16 +476,27 @@ class ProfileManager {
             return;
         }
 
-        achievements.forEach(achievement => {
-            if (!achievement.unlocked) return;
+        // Mapear conquistas para nomes amigáveis
+        const achievementNames = {
+            'first_coins': { name: '💰 Primeiras Moedas', description: 'Ganhe 100 moedas' },
+            'fast_clicker': { name: '⚡ Clique Rápido', description: 'Faça 50 cliques' },
+            'industrial': { name: '🏭 Industrial', description: 'Tenha 10 upgrades' },
+            'millionaire': { name: '💎 Milionário', description: 'Acumule 1 milhão de moedas' }
+        };
+
+        achievements.forEach(achievementId => {
+            const achievementInfo = achievementNames[achievementId] || { 
+                name: achievementId, 
+                description: 'Conquista desbloqueada' 
+            };
             
             const achievementEl = document.createElement('div');
             achievementEl.className = 'achievement unlocked';
             achievementEl.innerHTML = `
                 <div class="achievement-icon">✅</div>
                 <div class="achievement-info">
-                    <strong>${achievement.name}</strong>
-                    <small>${achievement.description}</small>
+                    <strong>${achievementInfo.name}</strong>
+                    <small>${achievementInfo.description}</small>
                 </div>
             `;
             achievementsList.appendChild(achievementEl);
@@ -596,18 +518,14 @@ class ProfileManager {
                 }
             };
 
-            // ✅ CORREÇÃO: Validação do nome
+            // ✅ CORREÇÃO: Validação simples
             if (!updates.name) {
                 this.showMessage('❌ Por favor, insira um nome de exibição', 'error');
                 return;
             }
 
-            if (updates.name.length < 2) {
-                this.showMessage('❌ O nome deve ter pelo menos 2 caracteres', 'error');
-                return;
-            }
-
-            const response = await fetch('/api/user/profile', {
+            // ✅ CORREÇÃO: Usar authFetch
+            const response = await window.authFetch('/api/user/profile', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json'
@@ -622,7 +540,7 @@ class ProfileManager {
                     this.userProfile = result.profile;
                     this.originalData = JSON.parse(JSON.stringify(this.userProfile));
                     
-                    // ✅ CORREÇÃO: Atualizar também no authManager
+                    // ✅ CORREÇÃO: Atualizar authManager
                     if (window.authManager && window.authManager.user) {
                         window.authManager.user.name = updates.name;
                         window.authManager.user.preferences = updates.preferences;
@@ -654,27 +572,6 @@ class ProfileManager {
                 }
             });
         }
-
-        // Auto-save quando preferências mudam
-        const checkboxes = document.querySelectorAll('.preference-item input[type="checkbox"]');
-        checkboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', () => {
-                // Pequeno delay para evitar muitas requisições
-                clearTimeout(this.autoSaveTimeout);
-                this.autoSaveTimeout = setTimeout(() => {
-                    this.updateProfile();
-                }, 1000);
-            });
-        });
-    }
-
-    startAutoRefresh() {
-        // Atualizar estatísticas a cada 30 segundos
-        setInterval(() => {
-            if (this.userProfile) {
-                this.loadProfile();
-            }
-        }, 30000);
     }
 
     formatNumber(num) {
@@ -689,13 +586,6 @@ class ProfileManager {
     showMessage(message, type = 'info') {
         console.log(`💬 ${type}: ${message}`);
         
-        // Usar o sistema de mensagens do authManager se disponível
-        if (window.authManager && window.authManager.showMessage) {
-            window.authManager.showMessage(message, type);
-            return;
-        }
-        
-        // Fallback local
         const messageDiv = document.getElementById('profile-messages');
         if (!messageDiv) return;
         
@@ -727,20 +617,38 @@ class ProfileManager {
             }
         }, 5000);
     }
+
+    showUnauthorizedMessage() {
+        const messageDiv = document.getElementById('profile-messages') || document.querySelector('.profile-content');
+        if (messageDiv) {
+            messageDiv.innerHTML = `
+                <div style="padding: 40px; text-align: center; background: #dc3545; color: white; border-radius: 12px; margin: 2rem 0;">
+                    <h3 style="margin-bottom: 1rem;">❌ Acesso não autorizado</h3>
+                    <p style="margin-bottom: 1.5rem;">Você precisa estar logado para acessar esta página.</p>
+                    <button onclick="window.location.href = '/'" class="btn btn-light" style="padding: 10px 20px;">
+                        🔑 Fazer Login
+                    </button>
+                </div>
+            `;
+        }
+        
+        // Esconder conteúdo principal
+        const profileGrid = document.querySelector('.profile-grid');
+        const gameHeader = document.querySelector('.game-header');
+        if (profileGrid) profileGrid.style.display = 'none';
+        if (gameHeader) gameHeader.style.display = 'none';
+    }
 }
 
-// ✅ CORREÇÃO: Funções globais otimizadas
+// ✅ CORREÇÃO: Funções globais simplificadas
 function redirectToGame() {
-    console.log('🎮 Redirecionando para o jogo...');
     window.location.href = '/game';
 }
 
 function logout() {
-    console.log('🚪 Iniciando logout...');
     if (window.authManager) {
         window.authManager.logout();
     } else {
-        // Fallback: redirecionar para home
         window.location.href = '/';
     }
 }
@@ -768,16 +676,7 @@ function resetPreferences() {
         document.getElementById('pref-music').checked = true;
         document.getElementById('pref-autosave').checked = true;
         window.profileManager.showMessage('⚙️ Preferências restauradas para os padrões', 'info');
-        
-        // Salvar automaticamente
-        setTimeout(() => {
-            updateProfile();
-        }, 500);
     }
-}
-
-function changePassword() {
-    alert('🔑 Para alterar sua senha, use a opção "Esqueci minha senha" na página de login.');
 }
 
 function exportData() {
@@ -797,7 +696,7 @@ function exportData() {
     }
 }
 
-// ✅ CORREÇÃO: Inicialização robusta
+// ✅ CORREÇÃO: Inicialização simplificada
 document.addEventListener('DOMContentLoaded', function() {
     console.log('👤 Inicializando página de perfil...');
     
@@ -810,45 +709,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 attempts++;
             }
             
-            if (window.authManager && window.authManager.isAuthenticated) {
+            if (window.authManager && window.authManager.isUserAuthenticated()) {
                 console.log('✅ Usuário autenticado, inicializando ProfileManager...');
                 window.profileManager = new ProfileManager();
+                await window.profileManager.init();
             } else {
-                console.log('❌ Usuário não autenticado, redirecionando...');
-                this.showUnauthorizedMessage();
+                console.log('❌ Usuário não autenticado');
+                const profileManager = new ProfileManager();
+                profileManager.showUnauthorizedMessage();
             }
         } catch (error) {
             console.error('❌ Erro na inicialização do perfil:', error);
-            this.showUnauthorizedMessage();
+            const profileManager = new ProfileManager();
+            profileManager.showUnauthorizedMessage();
         }
     };
-    
-    // Função para mostrar mensagem de não autorizado
-    function showUnauthorizedMessage() {
-        const messageDiv = document.getElementById('profile-messages') || document.querySelector('.profile-content');
-        if (messageDiv) {
-            messageDiv.innerHTML = `
-                <div style="padding: 40px; text-align: center; background: #dc3545; color: white; border-radius: 12px; margin: 2rem 0;">
-                    <h3 style="margin-bottom: 1rem;">❌ Acesso não autorizado</h3>
-                    <p style="margin-bottom: 1.5rem;">Você precisa estar logado para acessar esta página.</p>
-                    <button onclick="window.location.href = '/'" class="btn btn-light" style="padding: 10px 20px;">
-                        🔑 Fazer Login
-                    </button>
-                </div>
-            `;
-        }
-        
-        // Esconder conteúdo principal
-        document.querySelector('.profile-grid').style.display = 'none';
-        document.querySelector('.game-header').style.display = 'none';
-    }
     
     initProfileManager();
 });
 </script>
 
 <style>
-/* ✅ CORREÇÃO: Estilos otimizados e responsivos */
+/* ✅ CORREÇÃO: Estilos otimizados */
 .profile-content {
     padding: 1rem 0;
 }
@@ -861,10 +743,10 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .profile-card {
-    background: var(--white);
+    background: white;
     padding: 2rem;
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
+    border-radius: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
     border: 1px solid #e9ecef;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -894,7 +776,7 @@ document.addEventListener('DOMContentLoaded', function() {
     width: 120px;
     height: 120px;
     border-radius: 50%;
-    border: 4px solid var(--primary-color);
+    border: 4px solid #667eea;
     object-fit: cover;
     transition: transform 0.3s ease;
 }
@@ -923,14 +805,14 @@ document.addEventListener('DOMContentLoaded', function() {
     width: 100%;
     padding: 0.75rem;
     border: 2px solid #e9ecef;
-    border-radius: var(--border-radius);
+    border-radius: 8px;
     font-size: 1rem;
     transition: all 0.3s ease;
 }
 
 .profile-input:focus {
     outline: none;
-    border-color: var(--primary-color);
+    border-color: #667eea;
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
@@ -973,7 +855,7 @@ document.addEventListener('DOMContentLoaded', function() {
     gap: 1rem;
     padding: 1rem;
     background: #f8f9fa;
-    border-radius: var(--border-radius);
+    border-radius: 8px;
     transition: all 0.3s ease;
 }
 
@@ -993,14 +875,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .stat-label {
     font-size: 0.9rem;
-    color: var(--text-light);
+    color: #666;
     margin-bottom: 0.25rem;
 }
 
 .stat-value {
     font-size: 1.25rem;
     font-weight: bold;
-    color: var(--primary-color);
+    color: #667eea;
 }
 
 .progress-section {
@@ -1018,7 +900,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .progress-fill {
     height: 100%;
-    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+    background: linear-gradient(45deg, #667eea, #764ba2);
     border-radius: 4px;
     transition: width 0.5s ease;
 }
@@ -1027,7 +909,7 @@ document.addEventListener('DOMContentLoaded', function() {
     display: flex;
     justify-content: space-between;
     font-size: 0.9rem;
-    color: var(--text-light);
+    color: #666;
 }
 
 .preferences {
@@ -1042,7 +924,7 @@ document.addEventListener('DOMContentLoaded', function() {
     gap: 1rem;
     padding: 1rem;
     background: #f8f9fa;
-    border-radius: var(--border-radius);
+    border-radius: 8px;
     cursor: pointer;
     transition: all 0.3s ease;
 }
@@ -1063,11 +945,11 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 
 .preference-label strong {
-    color: var(--text-color);
+    color: #333;
 }
 
 .preference-label small {
-    color: var(--text-light);
+    color: #666;
     font-size: 0.8rem;
 }
 
@@ -1086,17 +968,17 @@ document.addEventListener('DOMContentLoaded', function() {
     align-items: center;
     padding: 0.75rem;
     background: #f8f9fa;
-    border-radius: var(--border-radius);
+    border-radius: 8px;
     margin-bottom: 0.5rem;
 }
 
 .rank-label {
-    color: var(--text-light);
+    color: #666;
 }
 
 .rank-value {
     font-weight: bold;
-    color: var(--primary-color);
+    color: #667eea;
 }
 
 .achievements-list {
@@ -1112,7 +994,7 @@ document.addEventListener('DOMContentLoaded', function() {
     align-items: center;
     gap: 1rem;
     padding: 0.75rem;
-    border-radius: var(--border-radius);
+    border-radius: 8px;
     transition: all 0.3s ease;
 }
 
@@ -1139,10 +1021,10 @@ document.addEventListener('DOMContentLoaded', function() {
 .achievement-placeholder {
     text-align: center;
     padding: 2rem;
-    color: var(--text-light);
+    color: #666;
     font-style: italic;
     background: #f8f9fa;
-    border-radius: var(--border-radius);
+    border-radius: 8px;
 }
 
 .account-actions {
@@ -1150,12 +1032,6 @@ document.addEventListener('DOMContentLoaded', function() {
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
     margin-bottom: 1.5rem;
-}
-
-.btn-warning {
-    background: #ffc107;
-    color: #000;
-    border: none;
 }
 
 .btn-danger {
@@ -1187,7 +1063,7 @@ document.addEventListener('DOMContentLoaded', function() {
     align-items: center;
     padding: 0.5rem;
     background: #f8f9fa;
-    border-radius: var(--border-radius);
+    border-radius: 8px;
 }
 
 .status-verified {
@@ -1195,7 +1071,7 @@ document.addEventListener('DOMContentLoaded', function() {
     font-weight: bold;
 }
 
-/* Loading overlay específico para o perfil */
+/* Loading overlay */
 .loading-overlay {
     position: fixed;
     top: 0;

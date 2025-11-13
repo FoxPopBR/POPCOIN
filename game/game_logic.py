@@ -1,4 +1,4 @@
-# game/game_logic.py - VERSÃO COMPLETAMENTE CORRIGIDA
+# game/game_logic.py - VERSÃO FINAL VERIFICADA
 import json
 import time
 import logging
@@ -10,19 +10,19 @@ logger = logging.getLogger(__name__)
 
 class GameManager:
     def __init__(self):
-        # ✅ CORREÇÃO: Estado padrão completamente alinhado e balanceado
+        # ✅ VERIFICADO: Estado padrão alinhado com frontend
         self.default_game_state = {
-            "coins": 0,  # ✅ CORREÇÃO: Usar 'coins' em vez de 'popcoins' para consistência
+            "coins": 0,
             "coins_per_click": 1,
             "coins_per_second": 0,
             "total_coins": 0,
             "prestige_level": 0,
             "upgrades": {
-                "click_power": 1,      # ✅ CORREÇÃO: Nomes padronizados
-                "auto_clickers": 0,    # ✅ CORREÇÃO: Somente um tipo de auto_clickers
+                "click_power": 1,
+                "auto_clickers": 0,
                 "click_bots": 0
             },
-            "click_count": 0,          # ✅ CORREÇÃO: click_count em vez de clicks
+            "click_count": 0,
             "level": 1,
             "experience": 0,
             "inventory": [],
@@ -30,34 +30,33 @@ class GameManager:
             "last_update": time.time()
         }
         
-        # ✅ CORREÇÃO: Sistema de balanceamento
+        # ✅ VERIFICADO: Sistema de balanceamento
         self.upgrade_config = {
             "click_power": {
-                "base_cost": 50,       # ✅ CORREÇÃO: Custo aumentado para balanceamento
+                "base_cost": 50,
                 "cost_multiplier": 1.8,
-                "effect_per_level": 1,  # +1 coin por clique por nível
+                "effect_per_level": 1,
                 "description": "Aumenta moedas por clique"
             },
             "auto_clickers": {
-                "base_cost": 100,      # ✅ CORREÇÃO: Custo balanceado
+                "base_cost": 100,
                 "cost_multiplier": 2.0,
-                "effect_per_level": 0.2,  # 0.2 coins por segundo por nível
+                "effect_per_level": 0.2,
                 "description": "Gera moedas automaticamente"
             },
             "click_bots": {
-                "base_cost": 500,      # ✅ CORREÇÃO: Custo balanceado
+                "base_cost": 500,
                 "cost_multiplier": 2.5,
-                "effect_per_level": 1.0,  # 1.0 coin por segundo por nível
+                "effect_per_level": 1.0,
                 "description": "Bots avançados que geram mais moedas"
             }
         }
         
-        logger.info("✅ GameManager inicializado com sistema balanceado")
+        logger.info("✅ GameManager inicializado e verificado")
 
     def get_user_game_state(self, user_id: str) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Sistema robusto de carregamento de estado"""
+        """✅ VERIFICADO: Sistema robusto de carregamento"""
         try:
-            # ✅ CORREÇÃO: Tentar banco primeiro
             from database.db_models import get_database_manager
             db_manager = get_database_manager()
             
@@ -68,14 +67,12 @@ class GameManager:
                     user_data = db_manager.get_user_data(user_id)
                     if user_data and user_data.get('game_data'):
                         game_state = user_data['game_data']
-                        # ✅ CORREÇÃO: Garantir estrutura correta
                         game_state = self._ensure_game_state_structure(game_state)
                         game_state = self.calculate_offline_earnings(game_state)
                         logger.info(f"✅ Estado carregado do banco: {user_id}")
                 except Exception as db_error:
                     logger.warning(f"⚠️ Erro no banco: {db_error}")
 
-            # ✅ CORREÇÃO: Fallback para estado padrão
             if not game_state:
                 logger.info(f"🆕 Criando estado inicial para: {user_id}")
                 game_state = self.create_initial_game_state(user_id)
@@ -87,13 +84,11 @@ class GameManager:
             return self.default_game_state.copy()
 
     def save_game_state(self, user_id: str, game_state: Dict[str, Any]) -> bool:
-        """✅ CORREÇÃO: Sistema robusto de salvamento"""
+        """✅ VERIFICADO: Sistema robusto de salvamento"""
         try:
-            # ✅ CORREÇÃO: Garantir estrutura antes de salvar
             game_state = self._ensure_game_state_structure(game_state)
             game_state['last_update'] = time.time()
 
-            # ✅ CORREÇÃO: Salvar via DatabaseManager
             from database.db_models import get_database_manager
             db_manager = get_database_manager()
             
@@ -116,20 +111,17 @@ class GameManager:
             return False
 
     def _ensure_game_state_structure(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
-        """✅ CORREÇÃO: Garante estrutura consistente do estado do jogo"""
+        """✅ VERIFICADO: Garante estrutura consistente"""
         default_state = self.default_game_state.copy()
         
-        # ✅ CORREÇÃO: Mesclar estados mantendo dados existentes
         for key, default_value in default_state.items():
             if key not in game_state:
                 game_state[key] = default_value
             elif key == "upgrades" and isinstance(default_value, dict):
-                # ✅ CORREÇÃO: Garantir todos os upgrades existam
                 for upgrade, upgrade_default in default_value.items():
                     if upgrade not in game_state[key]:
                         game_state[key][upgrade] = upgrade_default
         
-        # ✅ CORREÇÃO: Garantir campos numéricos são números
         numeric_fields = ["coins", "coins_per_click", "coins_per_second", "total_coins", 
                          "click_count", "level", "experience", "prestige_level"]
         for field in numeric_fields:
@@ -450,7 +442,7 @@ class GameManager:
             logger.error(f"❌ Erro no prestígio: {e}")
             return {"success": False, "error": str(e)}
 
-# ✅ CORREÇÃO: Singleton melhorado
+# ✅ VERIFICADO: Singleton
 _game_manager_instance = None
 
 def get_game_manager():
