@@ -1,4 +1,4 @@
-# database/db_models.py - VERSÃO COMPLETAMENTE CORRIGIDA E ALINHADA
+# database/db_models.py - VERSÃO CORRIGIDA
 import os
 import psycopg2
 import json
@@ -175,23 +175,22 @@ class DatabaseManager:
                 logger.info("✅ Tabela 'users' criada")
             else:
                 logger.info("✅ Tabela 'users' já existe")
+                # ✅ CORREÇÃO: Verificar e adicionar colunas faltantes
+                self._add_missing_columns(conn, cur)
 
             # ✅ CORREÇÃO: Tabela de estados do jogo COM ESTRUTURA ALINHADA
             if 'user_game_states' not in existing_tables:
                 cur.execute('''
                     CREATE TABLE user_game_states (
                         user_id VARCHAR(255) PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
-                        -- ✅ CORREÇÃO: Usar 'coins' em vez de 'popcoins' para consistência
                         coins BIGINT DEFAULT 0,
                         coins_per_click NUMERIC(10,2) DEFAULT 1,
                         coins_per_second NUMERIC(10,2) DEFAULT 0,
                         total_coins BIGINT DEFAULT 0,
                         prestige_level INTEGER DEFAULT 0,
-                        -- ✅ CORREÇÃO: Usar 'click_count' em vez de 'clicks'
                         click_count INTEGER DEFAULT 0,
                         level INTEGER DEFAULT 1,
                         experience INTEGER DEFAULT 0,
-                        -- ✅ CORREÇÃO: Estrutura de upgrades ALINHADA (sem auto_clicker duplicado)
                         upgrades JSONB DEFAULT '{
                             "click_power": 1,
                             "auto_clickers": 0,
@@ -250,6 +249,35 @@ class DatabaseManager:
         finally:
             cur.close()
             self.return_db_connection(conn)
+
+    def _add_missing_columns(self, conn, cur):
+        """✅ CORREÇÃO: Adicionar colunas faltantes na tabela users"""
+        try:
+            # Verificar colunas existentes
+            cur.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users'
+            """)
+            existing_columns = [row[0] for row in cur.fetchall()]
+            
+            # Colunas necessárias que podem estar faltando
+            required_columns = {
+                'last_activity': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+                'preferences': 'JSONB DEFAULT \'{}\'::jsonb'
+            }
+            
+            for column_name, column_definition in required_columns.items():
+                if column_name not in existing_columns:
+                    logger.info(f"🔄 Adicionando coluna faltante: {column_name}")
+                    cur.execute(f'ALTER TABLE users ADD COLUMN {column_name} {column_definition}')
+                    logger.info(f"✅ Coluna '{column_name}' adicionada com sucesso")
+            
+            conn.commit()
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao adicionar colunas faltantes: {e}")
+            conn.rollback()
 
     def _migrate_existing_tables(self, conn, cur):
         """✅ CORREÇÃO: Migrar tabelas existentes para estrutura alinhada"""
@@ -462,10 +490,13 @@ class DatabaseManager:
         
         try:
             with conn.cursor(cursor_factory=DictCursor) as cur:
+                # ✅ CORREÇÃO: Query atualizada para usar COALESCE nas colunas que podem não existir
                 cur.execute('''
                     SELECT 
                         u.user_id, u.email, u.display_name, u.avatar_url,
-                        u.email_verified, u.created_at, u.last_login, u.last_activity, u.preferences,
+                        u.email_verified, u.created_at, u.last_login, 
+                        COALESCE(u.last_activity, u.last_login) as last_activity,
+                        COALESCE(u.preferences, '{}'::jsonb) as preferences,
                         g.coins, g.coins_per_click, g.coins_per_second, g.total_coins,
                         g.prestige_level, g.click_count, g.level, g.experience,
                         g.upgrades, g.achievements, g.inventory, g.last_update
@@ -491,9 +522,7 @@ class DatabaseManager:
                     'last_activity': result['last_activity'].isoformat() if result['last_activity'] else datetime.now().isoformat(),
                     'preferences': result['preferences'] or {},
                     'game_data': {
-                        # ✅ CORREÇÃO: Usar 'coins' em vez de 'popcoins'
                         'coins': result['coins'] or 0,
-                        # ✅ CORREÇÃO: Usar 'click_count' em vez de 'clicks'
                         'click_count': result['click_count'] or 0,
                         'level': result['level'] or 1,
                         'experience': result['experience'] or 0,
@@ -501,7 +530,6 @@ class DatabaseManager:
                         'coins_per_second': float(result['coins_per_second'] or 0),
                         'total_coins': result['total_coins'] or 0,
                         'prestige_level': result['prestige_level'] or 0,
-                        # ✅ CORREÇÃO: Estrutura de upgrades ALINHADA
                         'upgrades': result['upgrades'] or {
                             'click_power': 1,
                             'auto_clickers': 0,
@@ -547,8 +575,8 @@ class DatabaseManager:
         """✅ CORREÇÃO: Estado padrão do jogo ALINHADO"""
         import time
         return {
-            'coins': 0,  # ✅ CORREÇÃO: Usar 'coins' em vez de 'popcoins'
-            'click_count': 0,  # ✅ CORREÇÃO: Usar 'click_count' em vez de 'clicks'
+            'coins': 0,
+            'click_count': 0,
             'level': 1,
             'experience': 0,
             'coins_per_click': 1,
@@ -557,7 +585,7 @@ class DatabaseManager:
             'prestige_level': 0,
             'upgrades': {
                 'click_power': 1,
-                'auto_clickers': 0,  # ✅ CORREÇÃO: Sem 'auto_clicker' duplicado
+                'auto_clickers': 0,
                 'click_bots': 0
             },
             'achievements': [],
