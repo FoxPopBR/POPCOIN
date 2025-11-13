@@ -1,4 +1,4 @@
-# auth/auth_manager.py - VERSÃO 100% FIREBASE AUTH
+# auth/auth_manager.py - VERSÃO CORRIGIDA PARA RENDER
 import firebase_admin
 from firebase_admin import auth, credentials, exceptions
 import os
@@ -18,12 +18,9 @@ class AuthManager:
         self.init_firebase()
     
     def init_firebase(self) -> bool:
-        """Inicialização simplificada e confiável"""
+        """Inicialização corrigida para Render"""
         try:
-            if self._initialized and self.firebase_app:
-                logger.info("✅ Firebase Admin já inicializado")
-                return True
-
+            # Verificar se já existe alguma app inicializada
             if firebase_admin._apps:
                 logger.info("✅ Firebase Admin já inicializado (global)")
                 self.firebase_app = firebase_admin.get_app()
@@ -34,33 +31,40 @@ class AuthManager:
             
             cred = None
             
-            # 1. Secret File do Render.com (produção)
+            # 1. ✅ CORREÇÃO: Secret File do Render (caminho correto)
             secret_file_path = '/etc/secrets/firebase_credentials.json'
             if os.path.exists(secret_file_path):
                 try:
                     logger.info("🔑 Usando secret file do Render")
                     cred = credentials.Certificate(secret_file_path)
+                    logger.info("✅ Credencial do secret file carregada")
                 except Exception as e:
                     logger.error(f"❌ Erro com secret file: {e}")
 
-            # 2. Variável de ambiente (fallback)
+            # 2. ✅ CORREÇÃO: Variável de ambiente (parse melhorado)
             if not cred:
                 service_account_json = os.environ.get('FIREBASE_SERVICE_ACCOUNT')
                 if service_account_json:
                     try:
                         logger.info("🔑 Usando variável de ambiente FIREBASE_SERVICE_ACCOUNT")
+                        # Limpar e parsear o JSON
+                        if service_account_json.startswith('"') and service_account_json.endswith('"'):
+                            service_account_json = service_account_json[1:-1].replace('\\n', '\n')
+                        
                         service_account_info = json.loads(service_account_json)
                         cred = credentials.Certificate(service_account_info)
+                        logger.info("✅ Credencial da variável de ambiente carregada")
                     except Exception as e:
                         logger.error(f"❌ Erro com variável de ambiente: {e}")
 
-            # 3. Arquivo local (desenvolvimento)
+            # 3. ✅ CORREÇÃO: Arquivo local (fallback)
             if not cred:
                 local_file_path = 'firebase_credentials.json'
                 if os.path.exists(local_file_path):
                     try:
                         logger.info("🔑 Usando arquivo local de credenciais")
                         cred = credentials.Certificate(local_file_path)
+                        logger.info("✅ Credencial local carregada")
                     except Exception as e:
                         logger.error(f"❌ Erro com arquivo local: {e}")
 
@@ -69,7 +73,8 @@ class AuthManager:
                 self._initialized = False
                 return False
 
-            self.firebase_app = firebase_admin.initialize_app(cred, name='popcoin-app')
+            # ✅ CORREÇÃO: Inicializar sem nome para usar app default
+            self.firebase_app = firebase_admin.initialize_app(cred)
             self._initialized = True
             logger.info("✅ Firebase Admin inicializado com sucesso!")
             return True
@@ -95,12 +100,17 @@ class AuthManager:
             return None
             
         try:
+            # ✅ CORREÇÃO: Verificar inicialização antes de usar
             if not self.is_initialized():
                 logger.error("❌ Firebase não inicializado para verificação de token")
+                # Tentar reinicializar
                 if not self.init_firebase():
+                    logger.error("❌ Falha na reinicialização do Firebase")
                     return None
 
+            # ✅ CORREÇÃO: Verificação direta do token
             decoded_token = auth.verify_id_token(token)
+            
             if not decoded_token:
                 logger.warning("❌ Token decodificado é None")
                 return None
@@ -156,15 +166,16 @@ class AuthManager:
         logger.info("✅ Configuração Firebase carregada para frontend")
         return config
 
-# 🔥 DECORATOR SIMPLES E EFICIENTE
+# 🔥 DECORATOR CORRIGIDO
 def require_auth(f):
     """
     Decorator para proteger rotas com Firebase token
-    INJETA request.current_user com dados do usuário
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not auth_manager:
+        # ✅ CORREÇÃO: Verificar se auth_manager está disponível e inicializado
+        if not auth_manager or not auth_manager.is_initialized():
+            logger.error("🚫 AuthManager não disponível ou não inicializado")
             return jsonify({'error': 'Sistema de autenticação não disponível'}), 503
         
         auth_header = request.headers.get('Authorization')
@@ -194,17 +205,17 @@ def require_auth(f):
         # ✅ INJETAR user_info na request
         request.current_user = user_info
         
-        logger.debug(f"✅ Requisição autenticada: {user_info['email']}")
+        logger.info(f"✅ Requisição autenticada: {user_info['email']}")
         
         return f(*args, **kwargs)
     
     return decorated_function
 
-# Instância global
+# ✅ CORREÇÃO: Instância global com inicialização robusta
 auth_manager = None
 
-def get_auth_manager():
-    """Singleton para AuthManager"""
+def initialize_auth_manager():
+    """Inicialização controlada do AuthManager"""
     global auth_manager
     if auth_manager is None:
         try:
@@ -215,13 +226,18 @@ def get_auth_manager():
                 logger.info("🎉 AuthManager inicializado com sucesso!")
             else:
                 logger.error("💥 AuthManager falhou na inicialização")
-                
+                # Tentar inicializar novamente
+                if auth_manager.init_firebase():
+                    logger.info("🎉 AuthManager inicializado na segunda tentativa!")
+                else:
+                    logger.error("💥 Falha definitiva na inicialização do AuthManager")
+                    
         except Exception as e:
             logger.critical(f"💥 Falha crítica na criação do AuthManager: {e}")
             auth_manager = None
     
     return auth_manager
 
-# Inicialização controlada
+# ✅ CORREÇÃO: Inicialização imediata e verificada
 logger.info("📦 Inicializando auth_manager.py...")
-auth_manager = get_auth_manager()
+auth_manager = initialize_auth_manager()

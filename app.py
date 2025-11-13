@@ -1,3 +1,5 @@
+# app.py - VERSÃO CORRIGIDA
+from functools import wraps
 import os
 import json
 import time
@@ -15,14 +17,31 @@ app = Flask(__name__)
 # ✅ CONFIGURAÇÃO MÍNIMA - Sem sessões complexas
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
-# Importar managers
+# ✅ CORREÇÃO: Importar e inicializar managers em ordem
 try:
-    from auth.auth_manager import auth_manager, require_auth
-    logger.info("✅ AuthManager e require_auth carregados")
+    from auth.auth_manager import auth_manager, require_auth, initialize_auth_manager
+    # Forçar inicialização do auth_manager
+    auth_manager = initialize_auth_manager()
+    if auth_manager and auth_manager.is_initialized():
+        logger.info("✅ AuthManager e require_auth carregados")
+    else:
+        logger.error("❌ AuthManager não inicializado corretamente")
+        # Criar um require_auth fallback
+        def require_auth_fallback(f):
+            @wraps(f)
+            def decorated_function(*args, **kwargs):
+                return jsonify({'error': 'Sistema de autenticação não disponível'}), 503
+            return decorated_function
+        require_auth = require_auth_fallback
 except Exception as e:
-    logger.warning(f"⚠️ AuthManager não disponível: {e}")
+    logger.error(f"❌ Erro crítico no AuthManager: {e}")
     auth_manager = None
-    require_auth = None
+    # Fallback para require_auth
+    def require_auth(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            return jsonify({'error': 'Sistema de autenticação indisponível'}), 503
+        return decorated_function
 
 try:
     from game.game_logic import GameManager
@@ -42,18 +61,37 @@ except Exception as e:
 
 # ✅ CACHE para configuração Firebase
 firebase_config_cache = None
+firebase_config_loaded = False
 
 def get_firebase_config():
-    """Obter configuração Firebase (com cache)"""
-    global firebase_config_cache
-    if firebase_config_cache is None and auth_manager:
-        try:
+    """Obter configuração Firebase (com cache e fallback)"""
+    global firebase_config_cache, firebase_config_loaded
+    
+    if firebase_config_loaded:
+        return firebase_config_cache or {}
+        
+    try:
+        if auth_manager and auth_manager.is_initialized():
             firebase_config_cache = auth_manager.get_firebase_config_for_frontend()
-            logger.info("✅ Configuração Firebase carregada e cacheada")
-        except Exception as e:
-            logger.error(f"❌ Erro ao obter configuração Firebase: {e}")
-            firebase_config_cache = {}
-    return firebase_config_cache or {}
+            logger.info("✅ Configuração Firebase carregada do AuthManager")
+        else:
+            # Fallback direto das variáveis de ambiente
+            firebase_config_cache = {
+                'apiKey': os.environ.get('NEXT_PUBLIC_FIREBASE_API_KEY', 'AIzaSyC_O0ur0PaP8iB_t2i6_m0WLU9C5FM4PZ4'),
+                'authDomain': os.environ.get('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN', 'popcoin-idle-829ae.firebaseapp.com'),
+                'projectId': os.environ.get('NEXT_PUBLIC_FIREBASE_PROJECT_ID', 'popcoin-idle-829ae'),
+                'storageBucket': os.environ.get('NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET', 'popcoin-idle-829ae.firebasestorage.app'),
+                'messagingSenderId': os.environ.get('NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID', '337350823197'),
+                'appId': os.environ.get('NEXT_PUBLIC_FIREBASE_APP_ID', '1:337350823197:web:4928ae4827e21c585da5f4')
+            }
+            logger.info("✅ Configuração Firebase carregada do ambiente")
+        
+        firebase_config_loaded = True
+        return firebase_config_cache
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao obter configuração Firebase: {e}")
+        return {}
 
 # ========== ROTAS PRINCIPAIS ==========
 
@@ -82,19 +120,22 @@ def profile():
 
 @app.route('/api/auth/verify', methods=['POST'])
 def auth_verify():
-    """🔥 VERIFICAÇÃO PURA DO FIREBASE - Sem sessões Flask"""
-    if not auth_manager:
-        return jsonify({'error': 'Sistema de autenticação não disponível'}), 503
-    
+    """🔥 VERIFICAÇÃO PURA DO FIREBASE"""
     try:
         data = request.get_json()
-        token = data.get('token')
+        token = data.get('token') if data else None
 
         if not token:
             return jsonify({'error': 'Token não fornecido'}), 400
 
         logger.info("🔍 Verificando token Firebase...")
-        user_info = auth_manager.verify_firebase_token(token)
+        
+        # ✅ CORREÇÃO: Verificação direta com fallback
+        if auth_manager and auth_manager.is_initialized():
+            user_info = auth_manager.verify_firebase_token(token)
+        else:
+            logger.error("❌ AuthManager não disponível para verificação")
+            return jsonify({'error': 'Sistema de autenticação não disponível'}), 503
         
         if not user_info:
             logger.warning("❌ Token inválido")
@@ -123,205 +164,156 @@ def firebase_config_api():
 
 # ========== API DE USUÁRIO (PROTEGIDAS) ==========
 
-@app.route('/api/user/profile', methods=['GET', 'PUT'])
+@app.route('/api/user/profile', methods=['GET'])
 @require_auth
 def user_profile():
-    """PROTEGIDA - Obter ou atualizar perfil"""
-    user_info = request.current_user  # Injetado pelo decorator
-    user_id = user_info['uid']
-
+    """PROTEGIDA - Obter perfil do usuário"""
     try:
-        if request.method == 'GET':
-            # Carregar dados completos do banco
-            if db_manager:
-                try:
-                    stored_data = db_manager.get_user_data(user_id)
-                    if stored_data:
-                        user_info.update(stored_data)
-                except Exception as db_error:
-                    logger.warning(f"⚠️ Erro ao carregar perfil do banco: {db_error}")
-            
-            return jsonify({
-                'success': True, 
-                'profile': user_info
-            })
-            
-        elif request.method == 'PUT':
-            data = request.get_json()
-            
-            # Campos permitidos para atualização
-            allowed_fields = ['name', 'preferences']
-            
-            updated_data = user_info.copy()
-            for field in allowed_fields:
-                if field in data:
-                    updated_data[field] = data[field]
-            
-            updated_data['last_activity'] = datetime.now().isoformat()
-            
-            # Salvar no banco
-            if db_manager:
-                try:
-                    db_manager.save_user_data(user_id, updated_data)
-                    logger.info(f"✅ Perfil salvo no banco: {user_id}")
-                except Exception as db_error:
-                    logger.warning(f"⚠️ Erro ao salvar perfil: {db_error}")
-            
-            logger.info(f"✅ Perfil atualizado: {user_id}")
-            return jsonify({
-                'success': True, 
-                'message': 'Perfil atualizado com sucesso',
-                'profile': updated_data
-            })
+        user_info = request.current_user  # Injetado pelo decorator
+        user_id = user_info['uid']
+
+        # Carregar dados completos do banco
+        user_data = user_info.copy()
+        if db_manager:
+            try:
+                stored_data = db_manager.get_user_data(user_id)
+                if stored_data:
+                    user_data.update(stored_data)
+                    logger.info(f"✅ Dados do banco carregados para: {user_id}")
+            except Exception as db_error:
+                logger.warning(f"⚠️ Erro ao carregar perfil do banco: {db_error}")
+        
+        return jsonify({
+            'success': True, 
+            'profile': user_data
+        })
             
     except Exception as e:
         logger.error(f"❌ Erro no perfil: {e}")
         return jsonify({'error': 'Erro interno no servidor'}), 500
 
-@app.route('/api/user/sync', methods=['POST'])
+@app.route('/api/user/create', methods=['POST'])
 @require_auth
-def user_sync():
-    """PROTEGIDA - Sincronizar dados"""
-    user_info = request.current_user
-    user_id = user_info['uid']
-
+def user_create():
+    """PROTEGIDA - Criar usuário no banco"""
     try:
-        data = request.get_json()
-        
-        # Carregar dados existentes
-        stored_data = user_info.copy()
+        user_info = request.current_user
+        user_id = user_info['uid']
+
         if db_manager:
-            try:
-                existing_data = db_manager.get_user_data(user_id)
-                if existing_data:
-                    stored_data.update(existing_data)
-            except Exception as db_error:
-                logger.warning(f"⚠️ Erro ao carregar dados: {db_error}")
-        
-        # Atualizar apenas campos permitidos
-        allowed_updates = ['name', 'picture', 'preferences', 'game_data']
-        updated = False
-        
-        for field in allowed_updates:
-            if field in data:
-                stored_data[field] = data[field]
-                updated = True
-        
-        if updated:
-            stored_data['last_activity'] = datetime.now().isoformat()
+            user_data = {
+                'uid': user_id,
+                'email': user_info['email'],
+                'name': user_info['name'],
+                'picture': user_info['picture'],
+                'created_at': datetime.now().isoformat(),
+                'last_login': datetime.now().isoformat()
+            }
             
-            if db_manager:
-                try:
-                    db_manager.save_user_data(user_id, stored_data)
-                    logger.info(f"✅ Dados sincronizados para: {user_id}")
-                except Exception as db_error:
-                    logger.warning(f"⚠️ Erro ao salvar dados: {db_error}")
-        
-        return jsonify({'success': True, 'user': stored_data})
-        
+            success = db_manager.create_user(user_id, user_data)
+            if success:
+                logger.info(f"✅ Usuário criado no banco: {user_id}")
+                return jsonify({'success': True, 'message': 'Usuário criado com sucesso'})
+            else:
+                return jsonify({'error': 'Erro ao criar usuário'}), 500
+        else:
+            return jsonify({'error': 'Banco de dados não disponível'}), 503
+            
     except Exception as e:
-        logger.error(f"❌ Erro na sincronização: {e}")
+        logger.error(f"❌ Erro ao criar usuário: {e}")
         return jsonify({'error': 'Erro interno no servidor'}), 500
 
 # ========== API DO JOGO (PROTEGIDAS) ==========
 
-@app.route('/api/game/state', methods=['GET', 'POST'])
+@app.route('/api/game/state', methods=['GET'])
 @require_auth
-def game_state():
-    """PROTEGIDA - Obter ou salvar estado do jogo"""
-    user_info = request.current_user
-    user_id = user_info['uid']
-
+def get_game_state():
+    """PROTEGIDA - Obter estado do jogo"""
     try:
-        if request.method == 'GET':
-            # Carregar estado do jogo
-            game_data = {}
-            
-            if game_manager:
-                try:
-                    game_data = game_manager.get_user_game_state(user_id)
-                except Exception as mgr_error:
-                    logger.warning(f"⚠️ Erro no game_manager: {mgr_error}")
-            
-            # Fallback para db_manager
-            if not game_data and db_manager:
-                try:
-                    stored_data = db_manager.get_user_data(user_id)
-                    if stored_data:
-                        game_data = stored_data.get('game_data', {})
-                except Exception as db_error:
-                    logger.warning(f"⚠️ Erro no banco: {db_error}")
-            
-            # Dados padrão se não encontrar nada
-            if not game_data:
-                game_data = {
-                    'coins': 0,
-                    'coins_per_click': 1,
-                    'coins_per_second': 0,
-                    'total_coins': 0,
-                    'prestige_level': 0,
-                    'upgrades': {
-                        'click_power': 1,
-                        'auto_clickers': 0,
-                        'click_bots': 0
-                    },
-                    'click_count': 0,
-                    'last_update': time.time(),
-                    'inventory': [],
-                    'achievements': []
-                }
-            
-            return jsonify(game_data)
-            
-        else:  # POST - Salvar estado
-            data = request.get_json()
-            
-            # Salvar no game_manager
-            save_success = True
-            if game_manager:
-                try:
-                    save_success = game_manager.save_game_state(user_id, data)
-                except Exception as mgr_error:
-                    logger.warning(f"⚠️ Erro ao salvar no game_manager: {mgr_error}")
-                    save_success = False
-            
-            # Salvar no db_manager também
-            if db_manager:
-                try:
-                    # Carregar dados existentes
-                    user_data = db_manager.get_user_data(user_id) or {}
-                    user_data['game_data'] = data
-                    user_data['last_activity'] = datetime.now().isoformat()
-                    
-                    db_manager.save_user_data(user_id, user_data)
-                except Exception as db_error:
-                    logger.warning(f"⚠️ Erro ao salvar no banco: {db_error}")
-            
-            return jsonify({'success': save_success})
+        user_info = request.current_user
+        user_id = user_info['uid']
+
+        game_data = {}
+        
+        # Tentar carregar do game_manager
+        if game_manager:
+            try:
+                game_data = game_manager.get_user_game_state(user_id)
+            except Exception as mgr_error:
+                logger.warning(f"⚠️ Erro no game_manager: {mgr_error}")
+        
+        # Fallback para db_manager
+        if not game_data and db_manager:
+            try:
+                stored_data = db_manager.get_user_data(user_id)
+                if stored_data:
+                    game_data = stored_data.get('game_data', {})
+            except Exception as db_error:
+                logger.warning(f"⚠️ Erro no banco: {db_error}")
+        
+        # Dados padrão se não encontrar nada
+        if not game_data:
+            game_data = {
+                'coins': 0,
+                'coins_per_click': 1,
+                'coins_per_second': 0,
+                'total_coins': 0,
+                'prestige_level': 0,
+                'upgrades': {
+                    'click_power': 1,
+                    'auto_clickers': 0,
+                    'click_bots': 0
+                },
+                'click_count': 0,
+                'last_update': time.time(),
+                'inventory': [],
+                'achievements': []
+            }
+        
+        return jsonify(game_data)
             
     except Exception as e:
-        logger.error(f"❌ Erro no game_state: {e}")
+        logger.error(f"❌ Erro ao obter estado do jogo: {e}")
         return jsonify({'error': 'Erro interno no servidor'}), 500
 
-@app.route('/api/user/ranking', methods=['GET'])
-def get_ranking():
-    """Ranking - PÚBLICA"""
+@app.route('/api/game/save', methods=['POST'])
+@require_auth
+def save_game_state():
+    """PROTEGIDA - Salvar estado do jogo"""
     try:
+        user_info = request.current_user
+        user_id = user_info['uid']
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'Dados não fornecidos'}), 400
+
+        # Salvar no game_manager
+        save_success = True
+        if game_manager:
+            try:
+                save_success = game_manager.save_game_state(user_id, data)
+            except Exception as mgr_error:
+                logger.warning(f"⚠️ Erro ao salvar no game_manager: {mgr_error}")
+                save_success = False
+        
+        # Salvar no db_manager também
         if db_manager:
-            ranking = db_manager.get_ranking()
-            return jsonify({'success': True, 'ranking': ranking})
-        else:
-            # Ranking mock para testes
-            mock_ranking = [
-                {'uid': 'user_1', 'name': 'Jogador Top', 'total_coins': 15000, 'level': 15},
-                {'uid': 'user_2', 'name': 'Clique Mestre', 'total_coins': 12000, 'level': 12},
-                {'uid': 'user_3', 'name': 'Iniciante', 'total_coins': 8000, 'level': 10}
-            ]
-            return jsonify({'success': True, 'ranking': mock_ranking})
+            try:
+                user_data = db_manager.get_user_data(user_id) or {}
+                user_data['game_data'] = data
+                user_data['last_activity'] = datetime.now().isoformat()
+                
+                db_manager.save_user_data(user_id, user_data)
+                logger.info(f"✅ Estado do jogo salvo no banco: {user_id}")
+            except Exception as db_error:
+                logger.warning(f"⚠️ Erro ao salvar no banco: {db_error}")
+        
+        return jsonify({'success': save_success})
             
     except Exception as e:
-        logger.error(f"❌ Erro ao obter ranking: {e}")
-        return jsonify({'error': 'Erro interno do servidor'}), 500
+        logger.error(f"❌ Erro ao salvar estado do jogo: {e}")
+        return jsonify({'error': 'Erro interno no servidor'}), 500
 
 # ========== ROTAS DO SISTEMA ==========
 
@@ -333,11 +325,13 @@ def health_check():
 @app.route('/api/system/health')
 def system_health():
     """Health check completo do sistema"""
+    auth_status = 'available' if (auth_manager and auth_manager.is_initialized()) else 'unavailable'
+    
     return jsonify({
         'status': 'healthy',
         'timestamp': time.time(),
         'services': {
-            'authentication': 'available' if auth_manager else 'unavailable',
+            'authentication': auth_status,
             'game_system': 'available' if game_manager else 'unavailable',
             'database': 'available' if db_manager else 'unavailable'
         }
