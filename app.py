@@ -100,12 +100,16 @@ def index():
     user_info = session.get('user')
     firebase_config = get_firebase_config()
     
-    # ✅ SE JÁ ESTIVER LOGADO, REDIRECIONAR PARA O JOGO
-    if user_info:
+    # ✅ CORREÇÃO: Verificar se veio do /game para evitar loop
+    referer = request.headers.get('Referer', '')
+    coming_from_game = '/game' in referer
+    
+    # ✅ SE JÁ ESTIVER LOGADO, REDIRECIONAR PARA O JOGO (mas não se veio do game)
+    if user_info and not coming_from_game:
         logger.info(f"🏠 Usuário já logado: {user_info.get('email')} - Redirecionando para jogo")
         return redirect('/game')
     
-    logger.info(f"🏠 Página inicial - Usuário: Deslogado")
+    logger.info(f"🏠 Página inicial - Usuário: {'Logado' if user_info else 'Deslogado'}")
     
     return render_template('index.html', 
                          firebase_config=firebase_config,
@@ -126,7 +130,6 @@ def game():
     return render_template('game.html', 
                          firebase_config=firebase_config,
                          user=user_info)
-
 @app.route('/profile')
 def profile():
     """Página de perfil - REQUER AUTENTICAÇÃO"""
