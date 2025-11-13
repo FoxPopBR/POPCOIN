@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# ✅ CONFIGURAÇÃO DE SESSÃO OTIMIZADA PARA JOGOS
+# ✅ CONFIGURAÇÃO DE SESSÃO OTIMIZADA
 app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SECURE=True,  # ✅ HTTPS no Render.com
+    SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    PERMANENT_SESSION_LIFETIME=timedelta(days=7),  # ✅ 7 DIAS para jogos
-    SESSION_REFRESH_EACH_REQUEST=True  # ✅ RENOVAR a cada requisição
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7),
+    SESSION_REFRESH_EACH_REQUEST=True
 )
 
 # Importar managers
@@ -61,10 +61,10 @@ def get_firebase_config():
             firebase_config_cache = {}
     return firebase_config_cache or {}
 
-# ✅ MIDDLEWARE DE SESSÃO SIMPLIFICADO E OTIMIZADO
+# ✅ MIDDLEWARE SIMPLIFICADO - SEM LOOP
 @app.before_request
 def handle_session_management():
-    """✅ SISTEMA DE SESSÃO SIMPLIFICADO - Foco em estabilidade"""
+    """✅ SISTEMA DE SESSÃO SIMPLIFICADO - Sem loops"""
     
     # ✅ SEMPRE usar sessão permanente para jogos
     session.permanent = True
@@ -85,30 +85,21 @@ def handle_session_management():
     # ✅ ATUALIZAR atividade APENAS se usuário estiver logado
     user_info = session.get('user')
     if user_info:
-        # ✅ Atualizar atividade a cada requisição (mais simples)
         user_info['last_activity'] = datetime.now().isoformat()
         session['user'] = user_info
-        # Não forçar session.modified = True para melhor performance
 
 # ========== ROTAS PRINCIPAIS ==========
 
 @app.route('/')
 def index():
-    """Página inicial - sistema inteligente de redirecionamento"""
+    """Página inicial - SEM LOOP DE REDIRECIONAMENTO"""
     logger.info("🏠 Página inicial - Verificando sessão...")
     
     user_info = session.get('user')
     firebase_config = get_firebase_config()
     
-    # ✅ CORREÇÃO: Verificar se veio do /game para evitar loop
-    referer = request.headers.get('Referer', '')
-    coming_from_game = '/game' in referer
-    
-    # ✅ SE JÁ ESTIVER LOGADO, REDIRECIONAR PARA O JOGO (mas não se veio do game)
-    if user_info and not coming_from_game:
-        logger.info(f"🏠 Usuário já logado: {user_info.get('email')} - Redirecionando para jogo")
-        return redirect('/game')
-    
+    # ✅ CORREÇÃO: NUNCA redirecionar automaticamente - deixar o frontend decidir
+    # Isso evita o loop de redirecionamento
     logger.info(f"🏠 Página inicial - Usuário: {'Logado' if user_info else 'Deslogado'}")
     
     return render_template('index.html', 
@@ -130,6 +121,7 @@ def game():
     return render_template('game.html', 
                          firebase_config=firebase_config,
                          user=user_info)
+
 @app.route('/profile')
 def profile():
     """Página de perfil - REQUER AUTENTICAÇÃO"""
@@ -150,7 +142,7 @@ def profile():
 
 @app.route('/api/auth/status')
 def auth_status():
-    """✅ VERIFICAÇÃO SIMPLES DE STATUS - sem lógica complexa"""
+    """✅ VERIFICAÇÃO SIMPLES DE STATUS"""
     try:
         user_info = session.get('user')
         
@@ -179,7 +171,7 @@ def auth_status():
 
 @app.route('/api/auth/login', methods=['POST'])
 def auth_login():
-    """✅ PROCESSAR LOGIN - Versão Simplificada e Robusta"""
+    """✅ PROCESSAR LOGIN - Versão Simplificada"""
     if not auth_manager:
         return jsonify({'error': 'Sistema de autenticação não disponível'}), 503
     
@@ -199,7 +191,7 @@ def auth_login():
 
         current_time = datetime.now().isoformat()
         
-        # ✅ DADOS ESSENCIAIS DO USUÁRIO (minimais)
+        # ✅ DADOS ESSENCIAIS DO USUÁRIO
         session_user_data = {
             'uid': user_info['uid'],
             'email': user_info['email'],
@@ -260,7 +252,6 @@ def auth_login():
                 
             except Exception as db_error:
                 logger.warning(f"⚠️ Erro no banco, usando dados locais: {db_error}")
-                # Usar dados mínimos se o banco falhar
                 if 'game_data' not in session_user_data:
                     session_user_data['game_data'] = {
                         'coins': 0,
@@ -279,7 +270,7 @@ def auth_login():
                         'achievements': []
                     }
         
-        # ✅ CRIAR SESSÃO (agora permanente)
+        # ✅ CRIAR SESSÃO
         session['user'] = session_user_data
         session['user_id'] = user_info['uid']
         
@@ -297,7 +288,7 @@ def auth_login():
 
 @app.route('/api/auth/logout', methods=['POST'])
 def auth_logout():
-    """✅ LOGOUT COMPLETO - Versão Simplificada"""
+    """✅ LOGOUT COMPLETO"""
     try:
         user_info = session.get('user')
         
@@ -320,7 +311,7 @@ def auth_logout():
         
     except Exception as e:
         logger.error(f"❌ Erro no logout: {e}")
-        session.clear()  # ✅ Garantir limpeza mesmo com erro
+        session.clear()
         return jsonify({'success': True, 'message': 'Logout realizado'})
 
 @app.route('/api/auth/firebase-config')
@@ -337,7 +328,7 @@ def firebase_config_api():
 
 @app.route('/api/user/sync', methods=['POST'])
 def user_sync():
-    """✅ SINCRONIZAR DADOS - Versão Otimizada"""
+    """✅ SINCRONIZAR DADOS"""
     user_info = session.get('user')
     if not user_info:
         return jsonify({'error': 'Não autenticado'}), 401
@@ -373,7 +364,7 @@ def user_sync():
 
 @app.route('/api/user/profile', methods=['GET', 'PUT'])
 def user_profile():
-    """✅ OBTER OU ATUALIZAR PERFIL - Versão Simplificada"""
+    """✅ OBTER OU ATUALIZAR PERFIL"""
     user_info = session.get('user')
     if not user_info:
         return jsonify({'error': 'Não autenticado'}), 401
@@ -421,7 +412,7 @@ def user_profile():
 
 @app.route('/api/game/state', methods=['GET', 'POST'])
 def game_state():
-    """✅ OBTER OU SALVAR ESTADO DO JOGO - Versão Robusta"""
+    """✅ OBTER OU SALVAR ESTADO DO JOGO"""
     user_info = session.get('user')
     if not user_info:
         return jsonify({'error': 'Não autenticado'}), 401
@@ -527,7 +518,7 @@ def system_health():
 
 @app.route('/debug/session')
 def debug_session():
-    """✅ DEBUG DA SESSÃO - Para desenvolvimento"""
+    """✅ DEBUG DA SESSÃO"""
     user_info = session.get('user')
     session_info = {
         'session_exists': bool(session),
@@ -559,7 +550,6 @@ if __name__ == '__main__':
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     
     logger.info(f"🚀 Iniciando PopCoin IDLE na porta {port}")
-    logger.info(f"⏰ Sistema de sessão: 7 dias de duração")
-    logger.info(f"🔄 Sessão permanente: Mantém login entre abas/navegador")
+    logger.info(f"🔄 Sistema de sessão: Sem loop de redirecionamento")
     
     app.run(host='0.0.0.0', port=port, debug=debug_mode)
